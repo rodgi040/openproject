@@ -11,7 +11,7 @@ module OpenProject::Flightplan
              bundled: true do
       menu :global_menu,
            :flightplan,
-           { controller: "/flightplan/home", action: :show },
+           { controller: "/flightplan/board", action: :index },
            caption: :"flightplan.label",
            after: :home,
            icon: :bookmark,

@@ -13,6 +13,8 @@ module Flightplan
 
     def index
       @project = find_project
+      @selected_projects = params[:projects].to_s.split(",").map(&:strip).reject(&:blank?)
+      @project_choices = Flightplan::Board.project_choices(User.current)
       @questions = question_scope.to_a
       @projects = Project.visible(User.current).order(:name)
       @authors = User.where(id: question_scope.unscope(:order).distinct.pluck(:author_id)).order(:login)
@@ -53,7 +55,13 @@ module Flightplan
         .merge(WorkPackage.visible(User.current))
         .oldest_first
       scope = scope.open unless params[:all] == "1"
-      scope = scope.where(work_packages: { project_id: @project.id }) if @project
+      if @project
+        scope = scope.where(work_packages: { project_id: @project.id })
+      elsif params[:projects].present?
+        identifiers = params[:projects].to_s.split(",").map(&:strip).reject(&:blank?)
+        ids = Project.visible(User.current).where(identifier: identifiers).select(:id)
+        scope = scope.where(work_packages: { project_id: ids })
+      end
       if params[:author].present?
         author = User.find_by(login: params[:author], type: "User")
         scope = scope.where(author_id: author&.id || 0)
@@ -69,7 +77,12 @@ module Flightplan
     end
 
     def inbox_path(anchor: nil)
-      options = { author: params[:author].presence, all: params[:all].presence, anchor: }.compact
+      options = {
+        author: params[:author].presence,
+        all: params[:all].presence,
+        projects: params[:projects].presence,
+        anchor:
+      }.compact
       if @project
         project_flightplan_questions_path(@project, options)
       else

@@ -20,3 +20,31 @@ de:
       submit: Antworten
       answered: Beantwortet.
       answer_by: Antwort von %{user}
+    board:
+      title: Flightplan
+      projects: Projekte
+      all: Alle
+      search: Suche
+      search_placeholder: "#id, Titel, Label"
+      labels: Labels
+      agents: Agenten
+      inbox: Rückfragen
+      wiki: Wiki
+      rejected_show: Abgelehnt
+      done_all: alle
+      done_recent: 14 Tage
+      more: "%{count} weitere"
+      empty: Keine Pakete
+      pause: "Pausenstand ✓"
+      children: "%{count} Kinder"
+      open_questions: "%{count} offen"
+      conflict: Das Paket wurde zwischenzeitlich geändert.
+      columns:
+        triage: Triage
+        question: Rückfrage
+        for_you: Für dich
+        agent_ready: Agent bereit
+        in_progress: In Arbeit
+        review: Review
+        done: Fertig
+        rejected: Abgelehnt

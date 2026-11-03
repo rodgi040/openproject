@@ -82,3 +82,83 @@
     if (event.key === "k") { show(index - 1); event.preventDefault(); }
   });
 })();
+
+(function () {
+  var board = document.getElementById("fp-board");
+  if (!board) return;
+  var alertBox = document.getElementById("fp-board-alert");
+  var dragged = false;
+
+  function showMessage(text) {
+    if (!alertBox) return;
+    alertBox.hidden = false;
+    alertBox.textContent = text;
+  }
+
+  board.querySelectorAll("[data-fp-board-card]").forEach(function (card) {
+    card.addEventListener("click", function (event) {
+      if (dragged) {
+        dragged = false;
+        return;
+      }
+      if (event.target.closest("a")) return;
+      window.dispatchEvent(new CustomEvent("fp:card-selected", {
+        detail: {
+          id: Number(card.dataset.id),
+          project: card.dataset.project,
+          subject: card.dataset.subject
+        }
+      }));
+    });
+
+    card.addEventListener("dragstart", function (event) {
+      if (event.target.closest("a")) {
+        event.preventDefault();
+        return;
+      }
+      dragged = true;
+      event.dataTransfer.setData("text/plain", card.dataset.id);
+      event.dataTransfer.effectAllowed = "move";
+    });
+  });
+
+  board.querySelectorAll(".fp-column").forEach(function (column) {
+    column.addEventListener("dragover", function (event) {
+      event.preventDefault();
+      column.classList.add("is-drop");
+    });
+    column.addEventListener("dragleave", function () {
+      column.classList.remove("is-drop");
+    });
+    column.addEventListener("drop", function (event) {
+      event.preventDefault();
+      column.classList.remove("is-drop");
+      var id = event.dataTransfer.getData("text/plain");
+      var card = board.querySelector('[data-fp-board-card][data-id="' + id + '"]');
+      if (!card || card.dataset.column === column.dataset.column) return;
+      var body = new URLSearchParams();
+      body.set("id", id);
+      body.set("column", column.dataset.column);
+      body.set("lock_version", card.dataset.lockVersion);
+      fetch(board.dataset.moveUrl, {
+        method: "POST",
+        headers: {
+          "X-CSRF-Token": board.dataset.csrf,
+          "Accept": "application/json",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: body.toString()
+      }).then(function (response) {
+        return response.json().catch(function () { return {}; }).then(function (payload) {
+          if (!response.ok || !payload.ok) {
+            showMessage(payload.error || "Statuswechsel abgelehnt");
+            return;
+          }
+          window.location.reload();
+        });
+      }).catch(function () {
+        showMessage("Statuswechsel abgelehnt");
+      });
+    });
+  });
+})();

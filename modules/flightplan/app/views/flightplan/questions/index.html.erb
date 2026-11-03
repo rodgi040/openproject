@@ -3,9 +3,25 @@
 <%=
   render(Primer::OpenProject::PageHeader.new) do |header|
     header.with_title { t("flightplan.questions.menu") }
+    header.with_breadcrumbs(nil)
     header.with_description { @project ? @project.name : t("flightplan.questions.all_projects") }
   end
 %>
+
+<nav class="fp-chips" aria-label="<%= t("flightplan.board.projects") %>">
+  <%= link_to flightplan_questions_path(author: params[:author].presence, all: params[:all].presence), class: "fp-chip #{'is-on' if @selected_projects.empty?}", data: { turbo: false } do %>
+    <%= t("flightplan.board.all") %>
+    <span><%= @project_choices.sum { |choice| choice[:open_count] } %></span>
+  <% end %>
+  <% @project_choices.each do |choice| %>
+    <% on = @selected_projects.include?(choice[:identifier]) %>
+    <% next_ids = on ? (@selected_projects - [choice[:identifier]]) : (@selected_projects + [choice[:identifier]]) %>
+    <%= link_to flightplan_questions_path(projects: next_ids.join(",").presence, author: params[:author].presence, all: params[:all].presence), class: "fp-chip #{'is-on' if on}", data: { project: choice[:identifier], open: choice[:open_count], turbo: false } do %>
+      <%= choice[:name] %>
+      <span><%= choice[:open_count] %></span>
+    <% end %>
+  <% end %>
+</nav>
 
 <%= form_with url: (@project ? project_flightplan_questions_path(@project) : flightplan_questions_path), method: :get, local: true, class: "mb-3" do %>
   <label>
@@ -75,6 +91,9 @@
         <%= form_with url: flightplan_question_answer_path(question), method: :post, local: true do %>
           <% if params[:author].present? %>
             <%= hidden_field_tag :author, params[:author] %>
+          <% end %>
+          <% if params[:projects].present? %>
+            <%= hidden_field_tag :projects, params[:projects] %>
           <% end %>
           <% if @project %>
             <%= hidden_field_tag :project_id, @project.identifier %>

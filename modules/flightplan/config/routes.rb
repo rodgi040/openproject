@@ -2,6 +2,8 @@
 
 Rails.application.routes.draw do
   get "flightplan", to: "flightplan/home#show", as: :flightplan
+  get "flightplan/board", to: "flightplan/board#index", as: :flightplan_board
+  post "flightplan/board/move", to: "flightplan/board#move", as: :flightplan_board_move
   get "flightplan/questions", to: "flightplan/questions#index", as: :flightplan_questions
   post "flightplan/questions/:id/answer", to: "flightplan/questions#answer", as: :flightplan_question_answer
   get "projects/:project_id/flightplan/questions", to: "flightplan/questions#index", as: :project_flightplan_questions

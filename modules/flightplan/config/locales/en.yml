@@ -20,3 +20,31 @@ en:
       submit: Answer
       answered: Answered.
       answer_by: Answer by %{user}
+    board:
+      title: Flightplan
+      projects: Projects
+      all: All
+      search: Search
+      search_placeholder: "#id, title, label"
+      labels: Labels
+      agents: Agents
+      inbox: Questions
+      wiki: Wiki
+      rejected_show: Rejected
+      done_all: all
+      done_recent: 14 days
+      more: "%{count} more"
+      empty: No packages
+      pause: "Pause ✓"
+      children: "%{count} children"
+      open_questions: "%{count} open"
+      conflict: The package was changed in the meantime.
+      columns:
+        triage: Triage
+        question: Question
+        for_you: For you
+        agent_ready: Agent ready
+        in_progress: In progress
+        review: Review
+        done: Done
+        rejected: Rejected

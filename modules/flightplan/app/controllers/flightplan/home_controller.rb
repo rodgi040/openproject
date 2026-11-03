@@ -12,6 +12,8 @@ module Flightplan
       :flightplan
     end
 
-    def show; end
+    def show
+      redirect_to flightplan_board_path
+    end
   end
 end
