@@ -1,0 +1,10 @@
+<% html_title(t("flightplan.label")) %>
+
+<%=
+  render(Primer::OpenProject::PageHeader.new) do |header|
+    header.with_title { t("flightplan.label") }
+    header.with_breadcrumbs(nil)
+  end
+%>
+
+<p><%= t("flightplan.intro") %></p>
