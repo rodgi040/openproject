@@ -12,6 +12,9 @@ module Flightplan
     belongs_to :answered_by, class_name: "User", optional: true
     belongs_to :previous_status, class_name: "Status", optional: true
 
+    # Nur die Antwort-JSON. Nicht gespeichert.
+    attr_accessor :status_restored
+
     validates :question, presence: true
     validates :status, inclusion: { in: STATUSES }
     validate :options_are_strings

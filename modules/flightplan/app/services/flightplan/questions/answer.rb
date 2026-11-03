@@ -24,6 +24,7 @@ module Flightplan
 
         Question.transaction do
           @question.lock!
+          @question.work_package.reload
           @question.update!(
             status: "answered",
             chosen_option: @option,
@@ -32,9 +33,9 @@ module Flightplan
             answered_at: Time.current
           )
           comment!
-          restore_status! if Question.open.where(work_package_id: @question.work_package_id).none?
-          @question
         end
+        @question.status_restored = restore_status!
+        @question
       end
 
       private
@@ -60,11 +61,20 @@ module Flightplan
         raise Error, "Kommentar fehlgeschlagen" unless result.success?
       end
 
+      # Zurücksetzen nur, solange das Paket noch wartet und keine weitere
+      # Frage offen ist. Ein fehlender Übergang lässt den Status stehen.
       def restore_status!
-        status = @question.previous_status
-        return unless status
+        work_package = @question.work_package.reload
+        return false unless work_package.status&.name == Question::WAITING_STATUS
+        return false if Question.open.where(work_package_id: work_package.id).exists?
 
-        StatusChange.apply!(@question.work_package, status)
+        status = @question.previous_status
+        return false unless status
+
+        StatusChange.apply!(work_package, status)
+        true
+      rescue Error
+        false
       end
     end
   end

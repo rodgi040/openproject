@@ -44,4 +44,49 @@ RSpec.describe "API v3 flightplan questions", type: :request, content_type: :jso
     expect(last_response).to have_http_status(:forbidden)
     expect(Flightplan::Question.find(body["id"])).to be_open
   end
+
+  it "answers a closed work package without restoring the status" do
+    post "/api/v3/flightplan/questions", {
+      work_package_id: work_package.id,
+      question: "Trotzdem?",
+      options: ["ja"]
+    }.to_json
+    expect(last_response.status).to eq(201), last_response.body
+    question_id = JSON.parse(last_response.body).fetch("id")
+
+    rejected = create(:status, name: "Abgelehnt", is_closed: true)
+    create(:workflow, role: dispatcher_role, type: work_package.type, old_status: waiting, new_status: rejected)
+    Flightplan::StatusChange.apply!(work_package.reload, rejected)
+    expect(work_package.reload.status).to eq(rejected)
+
+    login_as(create(:admin))
+    post "/api/v3/flightplan/questions/#{question_id}/answer", { text: "erledigt" }.to_json
+
+    expect(last_response.status).to eq(201), last_response.body
+    body = JSON.parse(last_response.body)
+    expect(body["status"]).to eq("answered")
+    expect(body["answer"]).to eq("erledigt")
+    expect(body["status_restored"]).to eq(false)
+    expect(work_package.reload.status).to eq(rejected)
+    expect(work_package.journals.order(:id).pluck(:notes).join).to include("Antwort: erledigt")
+  end
+
+  it "keeps the waiting status when the return transition is missing" do
+    post "/api/v3/flightplan/questions", {
+      work_package_id: work_package.id,
+      question: "Zurück?"
+    }.to_json
+    expect(last_response.status).to eq(201), last_response.body
+    question_id = JSON.parse(last_response.body).fetch("id")
+    expect(work_package.reload.status).to eq(waiting)
+
+    login_as(create(:admin))
+    post "/api/v3/flightplan/questions/#{question_id}/answer", { text: "ja" }.to_json
+
+    expect(last_response.status).to eq(201), last_response.body
+    body = JSON.parse(last_response.body)
+    expect(body["status_restored"]).to eq(false)
+    expect(work_package.reload.status).to eq(waiting)
+    expect(Flightplan::Question.find(question_id)).not_to be_open
+  end
 end

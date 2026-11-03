@@ -18,7 +18,9 @@ module Flightplan
         answered_by: question.answered_by&.login,
         answered_at: question.answered_at&.iso8601,
         created_at: question.created_at&.iso8601
-      }
+      }.tap do |payload|
+        payload[:status_restored] = question.status_restored unless question.status_restored.nil?
+      end
     end
   end
 end
