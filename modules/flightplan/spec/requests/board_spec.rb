@@ -91,6 +91,9 @@ RSpec.describe "Flightplan board", :skip_csrf, type: :rails_request do
 
       expect(response).to have_http_status(:ok), response.body
       expect(response.body).to include('id="fp-chat-panel"')
+      directory = response.body[/id="fp-agent-directory">(.*?)<\/script>/m, 1]
+      expect(directory).not_to include("&quot;")
+      expect { JSON.parse(directory) }.not_to raise_error
       expect(column_count("triage")).to eq(5)
       expect(column_count("question")).to eq(1)
       expect(column_count("for_you")).to eq(1)

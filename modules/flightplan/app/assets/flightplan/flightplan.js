@@ -2,9 +2,13 @@
   var directoryNode = document.getElementById("fp-agent-directory");
   var agents = {};
   if (directoryNode) {
-    JSON.parse(directoryNode.textContent).forEach(function (row) {
-      agents[String(row.id)] = row;
-    });
+    try {
+      JSON.parse(directoryNode.textContent).forEach(function (row) {
+        agents[String(row.id)] = row;
+      });
+    } catch (error) {
+      agents = {};
+    }
   }
 
   function badge(row) {
@@ -33,9 +37,13 @@
   var openNode = document.getElementById("fp-open-questions");
   var openQuestions = {};
   if (openNode) {
-    JSON.parse(openNode.textContent).forEach(function (row) {
-      openQuestions[String(row.work_package_id)] = row.href;
-    });
+    try {
+      JSON.parse(openNode.textContent).forEach(function (row) {
+        openQuestions[String(row.work_package_id)] = row.href;
+      });
+    } catch (error) {
+      openQuestions = {};
+    }
   }
 
   document.addEventListener("click", function (event) {
