@@ -5,8 +5,8 @@ module Flightplan
     module_function
 
     def caption(project)
-      scope = Question.open
-      scope = scope.joins(:work_package).where(work_packages: { project_id: project.id }) if project
+      scope = Question.open.joins(:work_package).merge(WorkPackage.visible(User.current))
+      scope = scope.where(work_packages: { project_id: project.id }) if project
       count = scope.count
       count.positive? ? "Rückfragen #{count}" : "Rückfragen"
     rescue StandardError

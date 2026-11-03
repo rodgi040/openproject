@@ -16,7 +16,6 @@ module Flightplan
 
       def call
         raise Error, "Antworten ist der Rolle Mensch oder einem Admin vorbehalten" unless allowed?
-        raise Error, "Die Frage ist bereits beantwortet" unless @question.open?
         raise Error, "Option oder Freitext fehlt" if @option.blank? && @text.blank?
         if @option.present? && @question.options.any? && !@question.options.include?(@option)
           raise Error, "Option unbekannt"
@@ -24,6 +23,7 @@ module Flightplan
 
         Question.transaction do
           @question.lock!
+          raise Error, "Die Frage ist bereits beantwortet" unless @question.open?
           @question.work_package.reload
           @question.update!(
             status: "answered",

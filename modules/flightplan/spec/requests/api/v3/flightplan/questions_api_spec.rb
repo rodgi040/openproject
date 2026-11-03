@@ -89,4 +89,26 @@ RSpec.describe "API v3 flightplan questions", type: :request, content_type: :jso
     expect(work_package.reload.status).to eq(waiting)
     expect(Flightplan::Question.find(question_id)).not_to be_open
   end
+
+  it "does not remember a previous status when the package is already waiting" do
+    Flightplan::StatusChange.apply!(work_package, waiting)
+    expect(work_package.reload.status).to eq(waiting)
+
+    post "/api/v3/flightplan/questions", {
+      work_package_id: work_package.id,
+      question: "Schon wartend?"
+    }.to_json
+
+    expect(last_response.status).to eq(201), last_response.body
+    question_id = JSON.parse(last_response.body).fetch("id")
+    expect(Flightplan::Question.find(question_id).previous_status_id).to be_nil
+    expect(work_package.reload.status).to eq(waiting)
+
+    login_as(create(:admin))
+    post "/api/v3/flightplan/questions/#{question_id}/answer", { text: "bleibt" }.to_json
+
+    expect(last_response.status).to eq(201), last_response.body
+    expect(JSON.parse(last_response.body)["status_restored"]).to eq(false)
+    expect(work_package.reload.status).to eq(waiting)
+  end
 end

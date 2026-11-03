@@ -46,11 +46,13 @@ module Flightplan
         open = Question.open.where(work_package_id: @work_package.id).oldest_first
         return open.first.previous_status_id if open.any?
 
+        # Schon „Wartet auf Mensch“ und keine offene Frage: es gibt keinen
+        # gemerkten Vorgänger. Die Wiederherstellung bleibt aus.
+        return if @work_package.status&.name == Question::WAITING_STATUS
+
         previous_id = @work_package.status_id
-        unless @work_package.status&.name == Question::WAITING_STATUS
-          StatusChange.apply!(@work_package, StatusChange.waiting_status)
-          @work_package.reload
-        end
+        StatusChange.apply!(@work_package, StatusChange.waiting_status)
+        @work_package.reload
         previous_id
       end
 

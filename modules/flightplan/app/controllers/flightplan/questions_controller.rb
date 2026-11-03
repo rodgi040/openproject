@@ -20,7 +20,7 @@ module Flightplan
 
     def answer
       @project = find_project
-      question = question_scope.find(params[:id])
+      question = visible_question(params[:id])
       Flightplan::Questions::Answer.call(
         user: User.current,
         question:,
@@ -48,7 +48,7 @@ module Flightplan
 
     def question_scope
       scope = Flightplan::Question
-        .includes(:author, :answered_by, work_package: %i[project status])
+        .includes(:answered_by, author: :groups, work_package: %i[project status])
         .joins(:work_package)
         .merge(WorkPackage.visible(User.current))
         .oldest_first
@@ -59,6 +59,13 @@ module Flightplan
         scope = scope.where(author_id: author&.id || 0)
       end
       scope
+    end
+
+    def visible_question(id)
+      Flightplan::Question
+        .joins(:work_package)
+        .merge(WorkPackage.visible(User.current))
+        .find(id)
     end
 
     def inbox_path(anchor: nil)
