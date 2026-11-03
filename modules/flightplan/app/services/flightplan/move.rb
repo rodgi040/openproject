@@ -23,7 +23,7 @@ module Flightplan
 
     def self.parse_lock(value)
       Integer(value)
-    rescue ArgumentError
+    rescue ArgumentError, TypeError
       raise Error, "lockVersion fehlt"
     end
   end

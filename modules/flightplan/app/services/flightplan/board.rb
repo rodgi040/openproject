@@ -128,7 +128,15 @@ module Flightplan
     def wiki_projects
       chosen = selected_projects
       rows = chosen.empty? ? projects : projects.select { |choice| chosen.include?(choice[:identifier]) }
-      rows.map { |choice| { name: choice[:name], href: "/projects/#{choice[:identifier]}/wiki" } }
+      found = Project.visible(@user).where(identifier: rows.map { |row| row[:identifier] }).includes(:wiki).index_by(&:identifier)
+      helpers = Rails.application.routes.url_helpers
+      rows.filter_map do |choice|
+        project = found[choice[:identifier]]
+        next unless project
+
+        slug = project.wiki&.start_page.presence || "wiki"
+        { name: choice[:name], href: helpers.project_wiki_path(project, slug) }
+      end
     end
 
     def params_for(overrides = {})
@@ -157,7 +165,7 @@ module Flightplan
       limits = @raw["limits"]
       raw = limits.is_a?(Hash) ? limits[key].to_i : 0
       raw = PAGE if raw <= 0
-      [raw, 5_000].min
+      [raw, 500].min
     end
 
     def limits

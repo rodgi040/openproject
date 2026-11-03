@@ -14,8 +14,13 @@ module Flightplan
     def index
       @project = find_project
       @selected_projects = params[:projects].to_s.split(",").map(&:strip).reject(&:blank?)
-      @project_choices = Flightplan::Board.project_choices(User.current)
       @questions = question_scope.to_a
+      if request.format.json?
+        render json: { items: Flightplan::ChatQuestions.items_from(@questions) }
+        return
+      end
+
+      @project_choices = Flightplan::Board.project_choices(User.current)
       @projects = Project.visible(User.current).order(:name)
       @authors = User.where(id: question_scope.unscope(:order).distinct.pluck(:author_id)).order(:login)
     end
@@ -29,9 +34,19 @@ module Flightplan
         option: params[:option],
         text: params[:text]
       )
+      if request.format.json?
+        render json: { ok: true, items: Flightplan::ChatQuestions.items(User.current) }
+        return
+      end
+
       nxt = question_scope.open.oldest_first.first
       redirect_to inbox_path(anchor: (nxt ? "q-#{nxt.id}" : nil)), notice: t("flightplan.questions.answered")
     rescue Flightplan::Error => error
+      if request.format.json?
+        render json: { ok: false, error: error.message }, status: :unprocessable_entity
+        return
+      end
+
       redirect_to inbox_path(anchor: "q-#{params[:id]}"), alert: error.message
     end
 

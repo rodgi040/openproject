@@ -84,7 +84,25 @@
 </div>
 
 <div class="fp-board-layout">
-  <aside id="fp-chat-panel" class="fp-chat-panel" aria-label="Chat" aria-expanded="false"></aside>
+  <% if User.current.admin? %>
+    <aside id="fp-chat-panel"
+           class="fp-chat-panel"
+           aria-label="<%= t("flightplan.board.chat") %>"
+           aria-expanded="false"
+           data-chat-origin="http://localhost:8092"
+           data-questions-url="<%= flightplan_questions_path %>"
+           data-csrf="<%= form_authenticity_token %>">
+      <button type="button" class="fp-chat-tab" data-fp-chat-toggle><%= t("flightplan.board.chat") %></button>
+      <div class="fp-chat-body" data-fp-chat-body hidden>
+        <div class="fp-chat-handle" data-fp-chat-resize role="separator" aria-orientation="vertical" aria-label="<%= t("flightplan.board.chat_resize") %>"></div>
+        <p class="fp-chat-offline" data-fp-chat-offline hidden><%= t("flightplan.board.chat_offline") %></p>
+        <iframe class="fp-chat-frame" data-fp-chat-frame title="<%= t("flightplan.board.chat") %>" hidden></iframe>
+      </div>
+      <script type="application/json" id="fp-chat-questions"><%= json_escape(@chat_questions.to_json).html_safe %></script>
+    </aside>
+  <% else %>
+    <aside id="fp-chat-panel" class="fp-chat-panel" aria-label="<%= t("flightplan.board.chat") %>" aria-expanded="false" hidden></aside>
+  <% end %>
   <div id="fp-board"
        class="fp-board-scroll"
        data-move-url="<%= flightplan_board_move_path %>"
@@ -111,6 +129,9 @@
                   lock_version: card.lock_version,
                   project: card.project_identifier,
                   subject: card.subject,
+                  status: column.status,
+                  labels: card.labels.map { |label| label[:name] }.to_json,
+                  url: work_package_path(card.id),
                   column: column.key
                 } do %>
               <div class="fp-card-line">

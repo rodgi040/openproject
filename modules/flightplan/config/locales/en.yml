@@ -38,6 +38,9 @@ en:
       pause: "Pause ✓"
       children: "%{count} children"
       open_questions: "%{count} open"
+      chat: Chat
+      chat_resize: Width
+      chat_offline: The chat on localhost:8092 is not reachable. The maintainer still has to switch it on.
       conflict: The package was changed in the meantime.
       columns:
         triage: Triage

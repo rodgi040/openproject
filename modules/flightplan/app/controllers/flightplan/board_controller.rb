@@ -13,6 +13,7 @@ module Flightplan
 
     def index
       @board = Flightplan::Board.load(user: User.current, params: board_query)
+      @chat_questions = Flightplan::ChatQuestions.items(User.current) if User.current.admin?
     end
 
     def move

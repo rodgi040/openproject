@@ -38,6 +38,9 @@ de:
       pause: "Pausenstand ✓"
       children: "%{count} Kinder"
       open_questions: "%{count} offen"
+      chat: Chat
+      chat_resize: Breite
+      chat_offline: Der Chat auf localhost:8092 ist nicht erreichbar. Die Umstellung macht der Maintainer.
       conflict: Das Paket wurde zwischenzeitlich geändert.
       columns:
         triage: Triage

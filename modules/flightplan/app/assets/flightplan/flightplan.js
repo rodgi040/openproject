@@ -110,11 +110,20 @@
         return;
       }
       if (event.target.closest("a")) return;
+      var labels = [];
+      try {
+        labels = JSON.parse(card.dataset.labels || "[]");
+      } catch (error) {
+        labels = [];
+      }
       window.dispatchEvent(new CustomEvent("fp:card-selected", {
         detail: {
           id: Number(card.dataset.id),
           project: card.dataset.project,
-          subject: card.dataset.subject
+          subject: card.dataset.subject,
+          status: card.dataset.status,
+          labels: labels,
+          url: card.dataset.url
         }
       }));
     });
@@ -169,4 +178,133 @@
       });
     });
   });
+})();
+
+(function () {
+  var panel = document.getElementById("fp-chat-panel");
+  var toggle = panel && panel.querySelector("[data-fp-chat-toggle]");
+  if (!panel || !toggle) return;
+
+  var origin = "http://localhost:8092";
+  var body = panel.querySelector("[data-fp-chat-body]");
+  var frame = panel.querySelector("[data-fp-chat-frame]");
+  var offline = panel.querySelector("[data-fp-chat-offline]");
+  var handle = panel.querySelector("[data-fp-chat-resize]");
+  var questionsNode = document.getElementById("fp-chat-questions");
+  var openKey = "fp-chat-open";
+  var widthKey = "fp-chat-width";
+  var questions = [];
+  try {
+    questions = JSON.parse(questionsNode ? questionsNode.textContent : "[]");
+  } catch (error) {
+    questions = [];
+  }
+
+  function width() {
+    var stored = Number(window.localStorage.getItem(widthKey));
+    if (!stored || stored < 280) return 360;
+    if (stored > 720) return 720;
+    return stored;
+  }
+
+  function post(message) {
+    if (!frame || !frame.contentWindow || frame.hidden) return;
+    frame.contentWindow.postMessage(message, origin);
+  }
+
+  function sendState() {
+    post({
+      type: "fp:questions",
+      items: questions
+    });
+  }
+
+  function setOpen(open) {
+    panel.classList.toggle("is-open", open);
+    panel.setAttribute("aria-expanded", open ? "true" : "false");
+    body.hidden = !open;
+    panel.style.setProperty("--fp-chat-width", width() + "px");
+    window.localStorage.setItem(openKey, open ? "1" : "0");
+    if (!open) return;
+    if (frame.getAttribute("src")) {
+      sendState();
+      return;
+    }
+    fetch(origin + "/chat/", { mode: "no-cors", cache: "no-store" }).then(function () {
+      offline.hidden = true;
+      frame.hidden = false;
+      frame.src = origin + "/chat/";
+    }).catch(function () {
+      frame.hidden = true;
+      frame.removeAttribute("src");
+      offline.hidden = false;
+    });
+  }
+
+  toggle.addEventListener("click", function () {
+    setOpen(!panel.classList.contains("is-open"));
+  });
+
+  if (handle) {
+    handle.addEventListener("pointerdown", function (event) {
+      event.preventDefault();
+      var startX = event.clientX;
+      var startWidth = width();
+      function move(next) {
+        var value = Math.min(720, Math.max(280, startWidth + (next.clientX - startX)));
+        panel.style.setProperty("--fp-chat-width", value + "px");
+        window.localStorage.setItem(widthKey, String(Math.round(value)));
+      }
+      function up() {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+      }
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    });
+  }
+
+  frame.addEventListener("load", sendState);
+
+  window.addEventListener("fp:card-selected", function (event) {
+    var detail = event.detail || {};
+    post({
+      type: "fp:context",
+      wp: {
+        id: detail.id,
+        subject: detail.subject,
+        project: detail.project,
+        status: detail.status,
+        labels: detail.labels || [],
+        url: detail.url
+      }
+    });
+  });
+
+  window.addEventListener("message", function (event) {
+    if (event.origin !== origin) return;
+    if (!frame.contentWindow || event.source !== frame.contentWindow) return;
+    var data = event.data || {};
+    if (data.type !== "fp:answer" || !data.id) return;
+    var bodyParams = new URLSearchParams();
+    if (data.option) bodyParams.set("option", data.option);
+    if (data.text) bodyParams.set("text", data.text);
+    fetch("/flightplan/questions/" + encodeURIComponent(data.id) + "/answer", {
+      method: "POST",
+      headers: {
+        "X-CSRF-Token": panel.dataset.csrf,
+        "Accept": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: bodyParams.toString()
+    }).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (payload) {
+        if (!response.ok || !payload.ok) return;
+        questions = payload.items || [];
+        sendState();
+      });
+    }).catch(function () {});
+  });
+
+  setOpen(window.localStorage.getItem(openKey) === "1");
 })();

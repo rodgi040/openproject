@@ -32,4 +32,16 @@ RSpec.describe "Flightplan question answer", :skip_csrf, type: :rails_request do
     expect(flash[:alert]).to eq("Die Frage ist bereits beantwortet")
     expect(question.reload.answer).to eq("eins")
   end
+
+  it "answers from the chat and returns the remaining list" do
+    post "/flightplan/questions/#{question.id}/answer",
+         params: { text: "aus dem Chat" },
+         headers: { "ACCEPT" => "application/json" }
+
+    expect(response).to have_http_status(:ok), response.body
+    payload = JSON.parse(response.body)
+    expect(payload["ok"]).to be(true)
+    expect(payload["items"]).to eq([])
+    expect(question.reload.answer).to eq("aus dem Chat")
+  end
 end

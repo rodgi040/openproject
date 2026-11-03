@@ -47,6 +47,7 @@ module OpenProject::Flightplan
 
     config.to_prepare do
       OpenProject::Flightplan::Hooks
+      OpenProject::Flightplan::CspHook
     end
   end
 end

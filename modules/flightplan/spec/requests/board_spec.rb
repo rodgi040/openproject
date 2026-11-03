@@ -85,12 +85,17 @@ RSpec.describe "Flightplan board", :skip_csrf, type: :rails_request do
       get "/flightplan/assets/flightplan.js"
       expect(response).to have_http_status(:ok), response.body
       expect(response.body).to include("fp:card-selected")
-      expect(response.body).not_to include("postMessage")
+      expect(response.body).to include('postMessage(message, origin)')
+      expect(response.body).to include('event.origin !== origin')
+      expect(response.body).not_to include("postMessage(message, '*'")
+      expect(response.body).not_to include('postMessage(message, "*"')
 
       get "/flightplan/board"
 
       expect(response).to have_http_status(:ok), response.body
       expect(response.body).to include('id="fp-chat-panel"')
+      expect(response.body).not_to include("data-fp-chat-frame")
+      expect(response.body).not_to include("http://localhost:8092")
       directory = response.body[/id="fp-agent-directory">(.*?)<\/script>/m, 1]
       expect(directory).not_to include("&quot;")
       expect { JSON.parse(directory) }.not_to raise_error
@@ -112,7 +117,10 @@ RSpec.describe "Flightplan board", :skip_csrf, type: :rails_request do
       expect(response.body).not_to include("Geheim Neu", "Abgelehnt Paket", "Alt fertig")
       expect(column_html("triage")).to include(I18n.t("flightplan.board.pause"), "engine", 'data-children="1"')
       expect(response.body).to include("d73a4a")
-      expect(response.body).to include("/projects/#{project.identifier}/wiki", "/projects/#{other.identifier}/wiki")
+      expect(response.body).to include(
+        project_wiki_path(project, project.wiki&.start_page.presence || "wiki"),
+        project_wiki_path(other, other.wiki&.start_page.presence || "wiki")
+      )
       expect(response.body).not_to include("/projects/#{hidden.identifier}/wiki")
 
       open_in_project = WorkPackage.visible(member).joins(:status).where(statuses: { is_closed: false }, project_id: project.id).count
@@ -145,6 +153,28 @@ RSpec.describe "Flightplan board", :skip_csrf, type: :rails_request do
       get "/flightplan/questions?projects=#{project.identifier}"
       expect(response.body).to include("Frage auf Factory")
       expect(response.body).not_to include("Frage auf Ada")
+    end
+
+    it "caps a column limit at 500" do
+      get "/flightplan/board", params: { limits: { triage: 900 } }
+
+      expect(response.body).to include('name="limits[triage]"')
+      expect(response.body).to include('value="500"')
+      expect(response.body).not_to include('value="900"')
+    end
+
+    it "renders the chat panel for an admin and allows the chat origin in CSP" do
+      login_as create(:admin)
+      get "/flightplan/board"
+
+      expect(response).to have_http_status(:ok), response.body
+      expect(response.body).to include('data-chat-origin="http://localhost:8092"')
+      expect(response.body).to include("data-fp-chat-frame")
+      expect(response.body).to include("fp-chat-offline")
+      header = response.headers["Content-Security-Policy"].to_s
+      expect(header).to include("frame-src")
+      expect(header).to include("child-src")
+      expect(header).to include("http://localhost:8092")
     end
 
     it "redirects the menu target" do
@@ -199,6 +229,15 @@ RSpec.describe "Flightplan board", :skip_csrf, type: :rails_request do
 
       expect(response).to have_http_status(:unprocessable_entity), response.body
       expect(JSON.parse(response.body)["error"]).to match(/transition|Übergang|invalid|ungültig/i)
+      expect(wp.reload.status).to eq(neu)
+    end
+
+    it "rejects a missing lock version" do
+      login_as admin
+      post "/flightplan/board/move", params: { id: wp.id, column: "for_you", lock_version: nil }
+
+      expect(response).to have_http_status(:unprocessable_entity), response.body
+      expect(JSON.parse(response.body)["error"]).to eq("lockVersion fehlt")
       expect(wp.reload.status).to eq(neu)
     end
 
