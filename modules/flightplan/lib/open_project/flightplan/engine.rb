@@ -16,6 +16,37 @@ module OpenProject::Flightplan
            after: :home,
            icon: :bookmark,
            if: Proc.new { User.current.logged? }
+
+      menu :global_menu,
+           :flightplan_questions,
+           { controller: "/flightplan/questions", action: :index },
+           caption: ->(*) { Flightplan::Menu.caption(nil) },
+           after: :flightplan,
+           icon: :comment,
+           if: Proc.new { User.current.logged? }
+
+      menu :project_menu,
+           :flightplan_questions,
+           { controller: "/flightplan/questions", action: :index },
+           caption: ->(project) { Flightplan::Menu.caption(project) },
+           after: :work_packages,
+           icon: :comment,
+           if: Proc.new { |_project| User.current.logged? }
+    end
+
+    add_api_endpoint "API::V3::Root" do
+      mount ::API::V3::Flightplan::QuestionsAPI
+      mount ::API::V3::Flightplan::WikiAPI
+    end
+
+    add_api_endpoint "API::V3::WorkPackages::WorkPackagesAPI", :id do
+      mount ::API::V3::Flightplan::WorkPackageQuestionsAPI
+    end
+
+    replace_principal_references "Flightplan::Question" => %i[author_id answered_by_id]
+
+    config.to_prepare do
+      OpenProject::Flightplan::Hooks
     end
   end
 end

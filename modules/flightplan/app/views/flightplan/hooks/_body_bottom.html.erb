@@ -1,0 +1,8 @@
+<% if User.current.logged? %>
+  <% agents = Flightplan::Menu.agent_directory %>
+  <% open_questions = Flightplan::Menu.open_question_links(User.current) %>
+  <script type="application/json" id="fp-agent-directory"><%= agents.to_json %></script>
+  <script type="application/json" id="fp-open-questions"><%= open_questions.to_json %></script>
+  <link rel="stylesheet" href="<%= flightplan_stylesheet_path %>">
+  <script src="<%= flightplan_javascript_path %>"></script>
+<% end %>

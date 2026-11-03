@@ -1,0 +1,98 @@
+<% html_title(t("flightplan.questions.menu")) %>
+
+<%=
+  render(Primer::OpenProject::PageHeader.new) do |header|
+    header.with_title { t("flightplan.questions.menu") }
+    header.with_description { @project ? @project.name : t("flightplan.questions.all_projects") }
+  end
+%>
+
+<%= form_with url: (@project ? project_flightplan_questions_path(@project) : flightplan_questions_path), method: :get, local: true, class: "mb-3" do %>
+  <label>
+    <%= t("flightplan.questions.filter_project") %>
+    <select name="project" class="FormControl-select">
+      <option value=""><%= t("flightplan.questions.all_projects") %></option>
+      <% @projects.each do |project| %>
+        <option value="<%= project.identifier %>" <%= "selected" if params[:project] == project.identifier %>><%= project.name %></option>
+      <% end %>
+    </select>
+  </label>
+  <label>
+    <%= t("flightplan.questions.filter_agent") %>
+    <select name="author" class="FormControl-select">
+      <option value=""><%= t("flightplan.questions.all_agents") %></option>
+      <% @authors.each do |author| %>
+        <option value="<%= author.login %>" <%= "selected" if params[:author] == author.login %>><%= author.name %></option>
+      <% end %>
+    </select>
+  </label>
+  <button type="submit" class="Button"><%= t("flightplan.questions.filter") %></button>
+<% end %>
+
+<% if @questions.empty? %>
+  <p class="op-toast -info"><%= t("flightplan.questions.empty") %></p>
+<% end %>
+
+<% @questions.each do |question| %>
+  <% context = flightplan_card_context(question) %>
+  <% group = flightplan_agent_group(question.author) %>
+  <article id="q-<%= question.id %>" class="Box mb-3" data-fp-card="<%= question.id %>">
+    <div class="Box-header">
+      <%= link_to "##{question.work_package.id}", work_package_path(question.work_package), class: "Button Button--small" %>
+      <span><%= question.work_package.project.name %></span>
+      <strong><%= question.work_package.subject %></strong>
+      <% if group %>
+        <span class="Label Label--secondary">Agent · <%= group %></span>
+      <% end %>
+    </div>
+    <div class="Box-body">
+      <p><%= question.question %></p>
+      <% if question.context.present? %>
+        <p class="color-fg-muted"><%= question.context %></p>
+      <% end %>
+      <ul>
+        <li><%= t("flightplan.questions.description") %>: <%= context[:description].presence || "–" %></li>
+        <li><%= t("flightplan.questions.pause") %>: <%= context[:pause].presence || "–" %></li>
+        <li><%= t("flightplan.questions.branch") %>: <%= context[:branch].presence || "–" %></li>
+        <li>
+          <%= t("flightplan.questions.pull_request") %>:
+          <% if context[:pull_request] %>
+            <%= link_to context[:pull_request], context[:pull_request] %>
+          <% else %>
+            –
+          <% end %>
+        </li>
+        <li><%= t("flightplan.questions.labels") %>: <%= context[:labels].presence&.join(", ") || "–" %></li>
+      </ul>
+      <% if context[:comments].any? %>
+        <h4><%= t("flightplan.questions.comments") %></h4>
+        <% context[:comments].each do |comment| %>
+          <p><strong><%= comment[:author] %></strong> <%= comment[:text] %></p>
+        <% end %>
+      <% end %>
+
+      <% if question.open? %>
+        <%= form_with url: flightplan_question_answer_path(question), method: :post, local: true do %>
+          <% if params[:author].present? %>
+            <%= hidden_field_tag :author, params[:author] %>
+          <% end %>
+          <% if @project %>
+            <%= hidden_field_tag :project_id, @project.identifier %>
+          <% elsif params[:project].present? %>
+            <%= hidden_field_tag :project, params[:project] %>
+          <% end %>
+          <% question.options.each do |option| %>
+            <label class="Button mr-1">
+              <%= radio_button_tag "option", option, false %>
+              <%= option %>
+            </label>
+          <% end %>
+          <textarea name="text" class="FormControl-input mt-2" rows="3" placeholder="<%= t("flightplan.questions.free_text") %>"></textarea>
+          <button type="submit" class="Button Button--primary mt-2"><%= t("flightplan.questions.submit") %></button>
+        <% end %>
+      <% else %>
+        <p><%= t("flightplan.questions.answer_by", user: question.answered_by&.login) %>: <%= question.chosen_option %> <%= question.answer %></p>
+      <% end %>
+    </div>
+  </article>
+<% end %>

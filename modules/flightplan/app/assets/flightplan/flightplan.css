@@ -1,0 +1,7 @@
+.fp-card-current {
+  outline: 2px solid var(--fgColor-accent, #0969da);
+}
+
+.fp-agent-badge {
+  margin-left: 0.4rem;
+}

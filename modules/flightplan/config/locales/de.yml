@@ -2,3 +2,21 @@ de:
   flightplan:
     label: Flightplan
     intro: Flightplan
+    questions:
+      menu: Rückfragen
+      all_projects: Alle Projekte
+      all_agents: Alle Agenten
+      filter_project: Projekt
+      filter_agent: Agent
+      filter: Filtern
+      empty: Keine offenen Rückfragen.
+      description: Beschreibung
+      pause: Pausenstand
+      branch: Branch
+      pull_request: PR
+      labels: Labels
+      comments: Letzte Kommentare
+      free_text: Freitext
+      submit: Antworten
+      answered: Beantwortet.
+      answer_by: Antwort von %{user}
