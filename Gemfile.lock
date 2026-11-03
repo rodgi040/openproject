@@ -129,6 +129,11 @@ PATH
     openproject-documents (1.0.0)
 
 PATH
+  remote: modules/flightplan
+  specs:
+    openproject-flightplan (0.1.0)
+
+PATH
   remote: modules/gantt
   specs:
     openproject-gantt (1.0.0)
@@ -1665,6 +1670,7 @@ DEPENDENCIES
   openproject-boards!
   openproject-calendar!
   openproject-documents!
+  openproject-flightplan!
   openproject-gantt!
   openproject-github_integration!
   openproject-gitlab_integration!
@@ -2043,6 +2049,7 @@ CHECKSUMS
   openproject-boards (1.0.0)
   openproject-calendar (1.0.0)
   openproject-documents (1.0.0)
+  openproject-flightplan (0.1.0)
   openproject-gantt (1.0.0)
   openproject-github_integration (1.0.0)
   openproject-gitlab_integration (3.0.0)
