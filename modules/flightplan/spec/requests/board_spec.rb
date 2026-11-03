@@ -82,7 +82,7 @@ RSpec.describe "Flightplan board", :skip_csrf, type: :rails_request do
     end
 
     it "counts visible packages into the status columns" do
-      get "/flightplan/assets/flightplan.js", headers: { "X-Requested-With" => "XMLHttpRequest" }
+      get "/flightplan/assets/flightplan.js"
       expect(response).to have_http_status(:ok), response.body
       expect(response.body).to include("fp:card-selected")
       expect(response.body).not_to include("postMessage")
