@@ -478,3 +478,9 @@ a[href*="op_edition=community-edition"],
 a[href*="/enterprise_plans"] {
   display: none !important;
 }
+
+/* Admin menu entry "Enterprise": keep the entry (token management), drop the gem glyph. */
+a[href*="/admin/enterprise"] svg,
+a[href*="/admin/enterprise"] .op-icon {
+  display: none !important;
+}

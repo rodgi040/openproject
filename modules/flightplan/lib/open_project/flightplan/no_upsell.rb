@@ -56,6 +56,10 @@ module OpenProject::Flightplan
       EnterpriseToken.singleton_class.prepend(HideBanners)
       Redmine::MenuManager::MenuItem.prepend(MenuItemNoGem)
       TabsHelper.prepend(TabsNoGem)
+      # Token page: same partial name, without the benefits/upsell block (view path wins over core).
+      EnterpriseTokensController.prepend_view_path(
+        OpenProject::Flightplan::Engine.root.join("app/views_override").to_s
+      )
     end
   end
 end
