@@ -66,6 +66,14 @@ RSpec.describe "Flightplan approvals", type: :rails_request do
   let!(:gh_wp) { create(:work_package, project:, author: admin, status: waiting, subject: "Github Zwei") }
   let!(:neu_wp) { create(:work_package, project:, author: admin, status: neu, subject: "Neu Drei") }
 
+  around do |example|
+    saved = ENV.fetch("FLIGHTPLAN_HUMAN_LOGINS", nil)
+    ENV["FLIGHTPLAN_HUMAN_LOGINS"] = "mensch-admin"
+    example.run
+  ensure
+    saved ? ENV["FLIGHTPLAN_HUMAN_LOGINS"] = saved : ENV.delete("FLIGHTPLAN_HUMAN_LOGINS")
+  end
+
   before do
     Rails.cache.clear
     [op_wp, op_geplant, neu_wp].each { |wp| master(wp, "op") }
@@ -181,7 +189,95 @@ RSpec.describe "Flightplan approvals", type: :rails_request do
     end
   end
 
+  describe "bulk edge cases" do
+    before { login(admin) }
+
+    it "rejects more than 100 entries with too_many and still handles the first 100" do
+      ids = (1..101).map(&:to_s)
+      with_csrf { approve(ids:, lock_versions: ids.to_h { |id| [id, 1] }) }
+      expect(flash[:alert]).to include("0 freigegeben", "zu viele Einträge")
+    end
+
+    it "keeps going after an exception in one entry and names the reason" do
+      second = create(:work_package, project:, author: admin, status: waiting, subject: "Op Zwei")
+      master(second, "op")
+      original = WorkPackages::UpdateService.method(:new)
+      allow(WorkPackages::UpdateService).to receive(:new) do |**args|
+        raise "boom with <secret> title" if args[:model].id == op_wp.id
+
+        original.call(**args)
+      end
+      with_csrf do
+        approve(ids: [op_wp.id.to_s, second.id.to_s],
+                lock_versions: { op_wp.id => op_wp.lock_version, second.id => second.lock_version })
+      end
+      expect(flash[:alert]).to start_with("1 freigegeben, 1 abgelehnt:")
+      expect(flash[:alert]).to include("##{op_wp.id} (Fehler (RuntimeError))")
+      expect(flash[:alert]).not_to include("secret")
+      expect(second.reload.status).to eq(startfreigabe)
+      expect(op_wp.reload.status).to eq(waiting)
+    end
+
+    it "rejects an XHR with a wrong CSRF token and changes nothing" do
+      with_csrf do
+        post "/flightplan/approvals", xhr: true,
+                                      params: { single: op_wp.id, authenticity_token: "falsch",
+                                                lock_versions: { op_wp.id => op_wp.lock_version } }
+      end
+      expect(response).not_to have_http_status(:ok)
+      expect(response).not_to be_redirect
+      expect(op_wp.reload.status).to eq(waiting)
+    end
+  end
+
+  describe "human allowlist" do
+    it "answers 403 for an admin who is not listed, and the page explains why" do
+      other = create(:admin, login: "anderer-admin", password: PASSWORD, password_confirmation: PASSWORD, language: "de",
+                             member_with_roles: { project => role })
+      login(other)
+      get "/flightplan/dashboard"
+      expect(response.body).to include("fp-approval-off", "steht nicht in FLIGHTPLAN_HUMAN_LOGINS")
+      expect(response.body).not_to include("Starten freigeben")
+      with_csrf { approve({ single: op_wp.id, lock_versions: { op_wp.id => op_wp.lock_version } }) }
+      expect(response).to have_http_status(:forbidden)
+      expect(op_wp.reload.status).to eq(waiting)
+    end
+
+    it "approves nobody when the list is empty (fail-closed) and shows a notice" do
+      ENV["FLIGHTPLAN_HUMAN_LOGINS"] = " , "
+      login(admin)
+      get "/flightplan/dashboard"
+      expect(response.body).to include("fp-approval-off", "Die Freigabe ist abgeschaltet")
+      expect(response.body).not_to include("Starten freigeben")
+      with_csrf { approve({ single: op_wp.id, lock_versions: { op_wp.id => op_wp.lock_version } }) }
+      expect(response).to have_http_status(:forbidden)
+      expect(op_wp.reload.status).to eq(waiting)
+    end
+
+    it "defaults to admin when the variable is unset, and keeps the agent blocklist on top" do
+      ENV.delete("FLIGHTPLAN_HUMAN_LOGINS")
+      expect(Flightplan::Approvals.human_logins).to eq(["admin"])
+      ENV["FLIGHTPLAN_HUMAN_LOGINS"] = "claude, mensch-admin"
+      agent = create(:admin, login: "claude", password: PASSWORD, password_confirmation: PASSWORD,
+                             member_with_roles: { project => role })
+      expect(Flightplan::Approvals.human?(agent)).to be(false)
+      expect(Flightplan::Approvals.human?(admin)).to be(true)
+    end
+  end
+
   describe "rejected callers" do
+    %w[Bearer Basic OAuth].each do |scheme|
+      it "answers 403 for a #{scheme} Authorization header next to a valid session" do
+        login(admin)
+        with_csrf do
+          approve({ single: op_wp.id, lock_versions: { op_wp.id => op_wp.lock_version } },
+                  headers: { "Authorization" => "#{scheme} Zm9vOmJhcg==" })
+        end
+        expect(response).to have_http_status(:forbidden)
+        expect(op_wp.reload.status).to eq(waiting)
+      end
+    end
+
     it "answers 403 for an API key, even next to a valid session, and changes nothing" do
       login(admin)
       token = create(:api_token, user: admin)

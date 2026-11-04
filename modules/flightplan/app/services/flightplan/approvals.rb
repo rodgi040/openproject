@@ -12,6 +12,11 @@ module Flightplan
     # "Agenten*"). Diese Konten sind nie Menschen und dürfen nie freigeben.
     AGENT_LOGINS = %w[claude codex cursor opencode hermes engine gandalf agentscope dispatcher github-sync].freeze
     AGENT_GROUPS = ["Agenten", "Agenten Coding", "Agenten ADA"].freeze
+    # Allowlist (fail-closed): nur diese Logins dürfen freigeben, zusätzlich zur Sperrliste und zum Admin-Recht.
+    # Komma-Liste in der Umgebung (kein Secret, steht in der Compose-Datei). Nicht gesetzt: Standard "admin".
+    # Gesetzt, aber leer: niemand gibt frei.
+    HUMAN_LOGINS_ENV = "FLIGHTPLAN_HUMAN_LOGINS"
+    DEFAULT_HUMAN_LOGINS = "admin"
 
     Result = Struct.new(:ok, :rejected, keyword_init: true) do
       def ok_count = ok.size
@@ -23,6 +28,26 @@ module Flightplan
       return true if AGENT_LOGINS.include?(user.login.to_s)
 
       GroupUser.where(user_id: user.id, group_id: Group.where(lastname: AGENT_GROUPS).select(:id)).exists?
+    end
+
+    def self.human_logins
+      ENV.fetch(HUMAN_LOGINS_ENV, DEFAULT_HUMAN_LOGINS).to_s.split(",").map(&:strip).compact_blank.uniq
+    end
+
+    def self.allowlist_empty?
+      human_logins.empty?
+    end
+
+    # Als Mensch markiert: Login steht in der Allowlist und ist kein Agent-Konto.
+    def self.human?(user)
+      user.logged? && human_logins.include?(user.login.to_s) && !agent_user?(user)
+    end
+
+    # :ok, :disabled (Allowlist leer) oder :not_human (Konto nicht in der Allowlist). Für den Hinweis der Seite.
+    def self.availability(user)
+      return :disabled if allowlist_empty?
+
+      human?(user) ? :ok : :not_human
     end
 
     # entries: Array von { id: "123", lock_version: "4" }
@@ -39,14 +64,23 @@ module Flightplan
       result = Result.new(ok: [], rejected: [])
       status = Status.find_by(name: TARGET_STATUS)
       @entries.first(MAX_ENTRIES).each do |entry|
-        outcome = approve(entry, status)
+        outcome = safe_approve(entry, status)
         outcome == :ok ? result.ok << entry[:id].to_i : result.rejected << [entry[:id].to_i, outcome]
       end
-      result.rejected << [nil, :too_many] if @entries.size > MAX_ENTRIES
+      result.rejected.unshift([nil, :too_many]) if @entries.size > MAX_ENTRIES
       result
     end
 
     private
+
+    # Eine Ausnahme bei einem Eintrag bricht die Sammelfreigabe nicht ab. Der Grund nennt nur die
+    # Ausnahmeklasse, nie die Meldung (keine Titel, keine Interna).
+    def safe_approve(entry, status)
+      approve(entry, status)
+    rescue StandardError => e
+      Rails.logger.error("[flightplan] approval ##{entry[:id].to_s[0, 20]} failed: #{e.class}: #{e.message}")
+      "Fehler (#{e.class.name})"
+    end
 
     def approve(entry, status)
       return :no_status unless status

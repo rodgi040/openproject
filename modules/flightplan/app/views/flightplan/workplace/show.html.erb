@@ -29,6 +29,7 @@
       <% @place.timeline.each do |step| %>
         <li data-status="<%= step.status %>">
           <time datetime="<%= step.at&.iso8601 %>"><%= step.at&.strftime("%d.%m.%Y %H:%M") %></time>
+          <% if step.from %><span class="fp-timeline-from"><%= step.from %> →</span><% end %>
           <strong><%= step.status %></strong>
           <% if step.user %><span><%= step.user %></span><% end %>
         </li>
@@ -89,6 +90,17 @@
           </li>
         <% end %>
       </ul>
+    <% end %>
+
+    <% if @place.langfuse %>
+      <h2><%= t("flightplan.workplace.langfuse") %></h2>
+      <p data-fp-langfuse>
+        <%= link_to t("flightplan.workplace.langfuse_traces", id: @place.work_package.id), @place.langfuse.trace_url, target: "_blank", rel: "noopener noreferrer", data: { turbo: false } %>
+        <% if @place.langfuse.branch_url %>
+          · <%= link_to t("flightplan.workplace.langfuse_branch"), @place.langfuse.branch_url, target: "_blank", rel: "noopener noreferrer", data: { turbo: false } %>
+        <% end %>
+      </p>
+      <p class="fp-dash-hint"><%= t("flightplan.workplace.langfuse_hint", host: @place.langfuse.host) %></p>
     <% end %>
 
     <h2><%= t("flightplan.questions.labels") %></h2>
@@ -154,10 +166,19 @@
   </section>
 
   <section class="fp-workplace-chat" aria-label="<%= t("flightplan.board.chat") %>">
-    <iframe class="fp-workplace-frame"
-            data-fp-workplace-frame
-            title="<%= t("flightplan.board.chat") %>"
-            src="<%= Flightplan::Workplace::CHAT_ORIGIN %>/chat/embed/<%= @place.work_package.id %>"></iframe>
+    <% if User.current.admin? %>
+      <div class="fp-chat-offline" data-fp-chat-offline role="alert" hidden>
+        <p><%= t("flightplan.workplace.chat_unreachable") %></p>
+        <button type="button" data-fp-chat-reload><%= t("flightplan.workplace.chat_reload") %></button>
+      </div>
+      <iframe class="fp-workplace-frame"
+              data-fp-workplace-frame
+              hidden
+              title="<%= t("flightplan.board.chat") %>"
+              data-src="<%= Flightplan::Workplace::CHAT_ORIGIN %>/chat/embed/<%= @place.work_package.id %>"></iframe>
+    <% else %>
+      <p class="fp-dash-hint" data-fp-chat-admin-only><%= t("flightplan.workplace.chat_admin_only") %></p>
+    <% end %>
   </section>
   <script type="application/json" id="fp-workplace-context"><%= json_escape(@place.context.to_json).html_safe %></script>
   <script type="application/json" id="fp-workplace-questions"><%= json_escape(@place.chat_questions.to_json).html_safe %></script>

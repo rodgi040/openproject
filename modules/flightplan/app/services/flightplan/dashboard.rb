@@ -27,12 +27,17 @@ module Flightplan
     APPROVABLE_STATUSES = ["Geplant", STATUS_WAITING].freeze
     MASTER_FIELD = "Master"
     STATUS_IDS_CACHE_SECONDS = 300
+    STATUS_IDS_CACHE_KEY = "flightplan-dashboard-status-ids"
+    REQUIRED_STATUSES = [STATUS_WAITING, STATUS_START, STATUS_PROGRESS, *APPROVABLE_STATUSES].uniq.freeze
+    # Nur diese Konten zählen als Absender der Startfehler-Notizen (ada-dispatch nutzt per fp-op `dispatcher`,
+    # siehe openproject/orchestrator/README.md). Notizen anderer Autoren lösen keinen Alarm aus.
+    FAILED_START_AUTHORS = %w[dispatcher].freeze
 
     def self.load(user:, params:, now: Time.current, snapshots: nil)
       new(user, params, now, snapshots).load
     end
 
-    attr_reader :tiles, :snapshots, :running
+    attr_reader :tiles, :snapshots, :running, :missing_statuses
 
     def initialize(user, params, now, snapshots)
       @user = user
@@ -42,10 +47,17 @@ module Flightplan
     end
 
     def load
-      data = Rails.cache.fetch(["flightplan-dashboard", @user.id], expires_in: CACHE_SECONDS.seconds) { compute }
+      key = ["flightplan-dashboard", @user.id]
+      data = Rails.cache.read(key)
+      if data.nil?
+        data = compute
+        # Fehlt ein Statusname, wird nichts gecacht (die Seite warnt und rechnet bei jedem Aufruf neu).
+        Rails.cache.write(key, data, expires_in: CACHE_SECONDS.seconds) if data[:missing_statuses].empty?
+      end
       @rows = data[:rows]
       @tiles = data[:tiles]
       @running = data[:running]
+      @missing_statuses = data[:missing_statuses] || []
       self
     end
 
@@ -79,11 +91,24 @@ module Flightplan
     end
 
     # Die Status-IDs werden einmal per Name aufgelöst und kurz gecacht (Status werden selten umbenannt).
+    # Fehlt ein Name (Umbenennung), wird nichts gecacht: die nächste Seite löst neu auf, sobald er wieder da ist,
+    # und die Seite warnt sichtbar.
+    def self.status_lookup
+      cached = Rails.cache.read(STATUS_IDS_CACHE_KEY)
+      return cached if cached
+
+      ids = Status.where(name: REQUIRED_STATUSES).pluck(:name, :id).to_h
+      lookup = { ids:, missing: REQUIRED_STATUSES - ids.keys }
+      Rails.cache.write(STATUS_IDS_CACHE_KEY, lookup, expires_in: STATUS_IDS_CACHE_SECONDS.seconds) if lookup[:missing].empty?
+      lookup
+    end
+
     def self.status_ids
-      Rails.cache.fetch("flightplan-dashboard-status-ids", expires_in: STATUS_IDS_CACHE_SECONDS.seconds) do
-        names = [STATUS_WAITING, STATUS_START, STATUS_PROGRESS] + APPROVABLE_STATUSES
-        Status.where(name: names.uniq).pluck(:name, :id).to_h
-      end
+      status_lookup[:ids]
+    end
+
+    def self.missing_statuses
+      status_lookup[:missing]
     end
 
     # Für dashboard-check.sh (H2): offene Arbeitspakete je Status und die Kachelzahlen derselben Seite.
@@ -93,6 +118,7 @@ module Flightplan
         .group("statuses.name").count
       {
         statuses:,
+        missing_statuses: dashboard.missing_statuses,
         total_open: statuses.values.sum,
         tiles: dashboard.tiles.to_h { |tile| [tile[:label], { open: tile[:open], blocked: tile[:blocked] }] }
       }
@@ -111,7 +137,8 @@ module Flightplan
     def compute
       bereiche = project_bereiche
       running = running_agents
-      { rows: attention_rows(bereiche), tiles: build_tiles(bereiche, running), running: }
+      { rows: attention_rows(bereiche), tiles: build_tiles(bereiche, running), running:,
+        missing_statuses: self.class.missing_statuses }
     end
 
     # project_id => { identifier:, name:, bereich: }
@@ -147,11 +174,13 @@ module Flightplan
         .pluck("work_packages.id", "work_packages.subject", "work_packages.project_id", "work_packages.status_id",
                "work_packages.assigned_to_id", "work_packages.updated_at", "work_packages.lock_version")
       wp_ids = found.map(&:first)
+      changed = status_changed_at(wp_ids)
+      waiting_ids = found.select { |row| row[3] == ids[STATUS_WAITING] }
       context = {
         agents: assignee_names(found.filter_map { |row| row[4] }),
         status_names: Status.where(id: found.map { |row| row[3] }.uniq).pluck(:id, :name).to_h,
-        changed: status_changed_at(wp_ids),
-        failed: failed_starts(found.select { |row| row[3] == ids[STATUS_WAITING] }.map(&:first)),
+        changed:,
+        failed: failed_starts(waiting_ids.to_h { |row| [row[0], changed[row[0]] || row[5]] }),
         masters: masters(wp_ids),
         ids:
       }
@@ -221,14 +250,22 @@ module Flightplan
       end
     end
 
-    # "Start fehlgeschlagen" (H4): Alarm- oder Rückfall-Kommentar der letzten 14 Tage in den Journal-Notizen.
-    def failed_starts(wp_ids)
-      return {} if wp_ids.empty?
+    # "Start fehlgeschlagen" (H4): Alarm- oder Rückfall-Kommentar der letzten 14 Tage in den Journal-Notizen,
+    # nur von FAILED_START_AUTHORS und nur jünger als der letzte Eintritt in "Wartet auf Mensch"
+    # (entered_at je Arbeitspaket). Eine Notiz im Journal des Eintritts selbst zählt mit (gleicher Zeitpunkt).
+    def failed_starts(entered_at)
+      return {} if entered_at.empty?
 
-      Journal.where(journable_type: "WorkPackage", journable_id: wp_ids)
+      notes = Journal.joins(:user)
+        .where(journable_type: "WorkPackage", journable_id: entered_at.keys, users: { login: FAILED_START_AUTHORS })
         .where("journals.created_at >= ?", @now - FAILED_START_DAYS.days)
         .where("journals.notes LIKE ? OR journals.notes LIKE ?", *FAILED_START_NOTES)
-        .group(:journable_id).maximum(:created_at)
+        .pluck(:journable_id, "journals.created_at")
+      notes.each_with_object({}) do |(id, at), found|
+        next if at < entered_at[id]
+
+        found[id] = [found[id], at].compact.max
+      end
     end
 
     # Custom field "Master" (github | op) je Arbeitspaket, eine Abfrage.

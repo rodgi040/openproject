@@ -64,6 +64,13 @@ de:
       progress: Unteraufgaben
       progress_label: "%{done} von %{total} fertig"
       runs: Agent-Läufe
+      langfuse: Langfuse
+      langfuse_traces: "Traces zu op-%{id}"
+      langfuse_branch: "Traces zum Branch"
+      langfuse_hint: "Der Link öffnet %{host} im Browser des Maintainers und geht nur über dessen SSH-Tunnel. Ohne Tunnel bleibt die Seite leer."
+      chat_unreachable: "Chat nicht erreichbar. Der Chat-Proxy oder der Chat-Dienst läuft nicht, oder der SSH-Tunnel zu Port 8092 fehlt."
+      chat_reload: "Neu laden"
+      chat_admin_only: "Chat nur für Admins."
       runs_empty: Keine Claims oder Starts.
       agent: Agent
       questions: Offene Rückfragen
@@ -74,6 +81,7 @@ de:
       menu: ADA Dashboard
       title: ADA Dashboard
       not_active: nicht aktiv
+      missing_status: "Status „%{name}“ nicht gefunden. Zählungen und Freigabe für diesen Status sind unvollständig, bis er wieder so heißt."
       stale: "veraltet (%{age})"
       inactive:
         missing: Die Quelldatei fehlt.
@@ -128,6 +136,9 @@ de:
       none: Es wurde nichts ausgewählt.
       done: "%{ok} freigegeben, %{rejected} abgelehnt."
       done_with_reasons: "%{ok} freigegeben, %{rejected} abgelehnt: %{reasons}"
+      unavailable:
+        disabled: "Die Freigabe ist abgeschaltet: %{env} ist leer, niemand darf freigeben."
+        not_human: "Dieses Konto steht nicht in %{env}. Freigeben dürfen nur dort genannte Admin-Konten."
       hint: "Setzt nur den Status auf „Startfreigabe“ als der angemeldete Mensch. Den Start übernimmt später ada-dispatch."
       reasons:
         invalid_id: Ungültige Nummer

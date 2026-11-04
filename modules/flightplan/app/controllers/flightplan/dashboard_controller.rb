@@ -14,6 +14,7 @@ module Flightplan
 
     def index
       @dashboard = Flightplan::Dashboard.load(user: User.current, params: params.permit(:bereich))
+      @approval_state = Flightplan::Approvals.availability(User.current)
     end
   end
 end

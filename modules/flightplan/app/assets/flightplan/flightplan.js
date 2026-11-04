@@ -330,7 +330,7 @@
   }
 
   function post(message) {
-    if (!frame || !frame.contentWindow) return;
+    if (!frame || !frame.getAttribute("src") || !frame.contentWindow) return;
     frame.contentWindow.postMessage(message, origin);
   }
 
@@ -339,12 +339,42 @@
     post({ type: "fp:questions", items: questions });
   }
 
+  var offline = root.querySelector("[data-fp-chat-offline]");
+  var reload = root.querySelector("[data-fp-chat-reload]");
+  var helloSeen = false;
+  var helloTimer = null;
+
+  function showOffline() {
+    window.clearTimeout(helloTimer);
+    frame.hidden = true;
+    frame.removeAttribute("src");
+    if (offline) offline.hidden = false;
+  }
+
+  // Erreichbarkeit vor dem Laden (no-cors: nur ein Verbindungsfehler ist sichtbar, kein Statuscode). Eine 502-Seite
+  // des Proxys meldet sich nicht mit fp:hello; bleibt es aus, zeigt die Seite denselben Hinweis.
+  function start() {
+    helloSeen = false;
+    window.clearTimeout(helloTimer);
+    if (offline) offline.hidden = true;
+    fetch(origin + "/chat/", { mode: "no-cors", cache: "no-store" }).then(function () {
+      frame.removeAttribute("src");
+      frame.hidden = false;
+      frame.src = frame.dataset.src;
+      helloTimer = window.setTimeout(function () {
+        if (!helloSeen) showOffline();
+      }, 15000);
+    }).catch(showOffline);
+  }
+
   if (frame) {
     frame.addEventListener("load", sendState);
     // The iframe's listener starts with its module, after the load event. Repeat until it answers.
     [800, 2000, 5000, 10000].forEach(function (delay) {
       window.setTimeout(sendState, delay);
     });
+    if (reload) reload.addEventListener("click", start);
+    start();
   }
 
   window.addEventListener("message", function (event) {
@@ -352,6 +382,10 @@
     if (!frame || !frame.contentWindow || event.source !== frame.contentWindow) return;
     var data = event.data || {};
     if (data.type === "fp:hello") {
+      helloSeen = true;
+      window.clearTimeout(helloTimer);
+      if (offline) offline.hidden = true;
+      frame.hidden = false;
       sendState();
       return;
     }

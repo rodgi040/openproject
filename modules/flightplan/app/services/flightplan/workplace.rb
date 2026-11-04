@@ -10,16 +10,20 @@ module Flightplan
     START_STATUSES = ["In Arbeit", "Startfreigabe"].freeze
     CLAIM_NOTE = /\Aclaim\s+(\S+)/
     START_NOTE = /\Astart\b/i
+    LANGFUSE_URL_ENV = "FLIGHTPLAN_LANGFUSE_URL"
+    LANGFUSE_PROJECT_ENV = "FLIGHTPLAN_LANGFUSE_PROJECT"
+    LANGFUSE_PROJECT = /\A[A-Za-z0-9_-]{1,64}\z/
 
     Page = Struct.new(
       :work_package, :subject, :status, :project_name, :project_identifier,
       :description, :description_full, :labels, :agent, :involved,
       :questions, :branch, :pull_request, :comments,
-      :timeline, :tree, :progress, :runs, :context, :chat_questions,
+      :timeline, :tree, :progress, :runs, :context, :chat_questions, :langfuse,
       keyword_init: true
     )
     Person = Struct.new(:name, :group, keyword_init: true)
-    Step = Struct.new(:at, :status, :user, keyword_init: true)
+    Step = Struct.new(:at, :status, :from, :user, keyword_init: true)
+    Langfuse = Struct.new(:trace_url, :branch_url, :host, keyword_init: true)
     Node = Struct.new(:id, :subject, :status, :role, keyword_init: true)
     Progress = Struct.new(:done, :total, :percent, keyword_init: true)
     Run = Struct.new(:at, :kind, :label, :user, keyword_init: true)
@@ -63,8 +67,34 @@ module Flightplan
         progress: progress_for(children),
         runs: runs_for(journals),
         context: context_hash,
-        chat_questions: Flightplan::ChatQuestions.items_from(open_questions)
+        chat_questions: Flightplan::ChatQuestions.items_from(open_questions),
+        langfuse: langfuse_links(branch_for(notes))
       )
+    end
+
+    # Langfuse-Deep-Links nur bei gesetzter FLIGHTPLAN_LANGFUSE_URL (http/https, ohne Zugangsdaten). Die Links
+    # führen auf die Adresse des Maintainers (localhost:3200 über seinen SSH-Tunnel), nicht auf diesen Server.
+    def self.langfuse_base
+      raw = ENV[LANGFUSE_URL_ENV].to_s.strip
+      return if raw.empty?
+
+      uri = URI.parse(raw)
+      return unless %w[http https].include?(uri.scheme) && uri.host.present? && uri.userinfo.nil?
+
+      "#{uri.scheme}://#{uri.host}#{":#{uri.port}" unless uri.port == uri.default_port}#{uri.path.to_s.chomp('/')}"
+    rescue URI::InvalidURIError
+      nil
+    end
+
+    def langfuse_links(branch)
+      base = self.class.langfuse_base
+      return if base.nil?
+
+      project = ENV[LANGFUSE_PROJECT_ENV].to_s.strip
+      path = project.match?(LANGFUSE_PROJECT) ? "#{base}/project/#{project}/traces" : base
+      search = ->(term) { "#{path}?#{{ search: term }.to_query}" }
+      Langfuse.new(trace_url: search.("op-#{@work_package.id}"), branch_url: branch && search.(branch),
+                   host: URI.parse(base).then { |uri| "#{uri.host}:#{uri.port}" })
     end
 
     private
@@ -140,14 +170,18 @@ module Flightplan
       @status_names ||= Status.pluck(:id, :name).to_h
     end
 
+    # Jeder Statuswechsel einzeln, gelesen aus dem Diff des Journals (journal.details["status_id"] = [alt, neu]),
+    # nicht aus dem Vergleich zweier Zeilen. Grenze: OpenProject fasst Änderungen desselben Nutzers innerhalb von
+    # journal_aggregation_time_minutes (Standard 5 min) in einem Journal zusammen und überschreibt dabei dessen
+    # Daten; ein Zwischenstatus, den kein Journal je als Endstand gespeichert hat, ist nicht mehr zu lesen. Dann
+    # erscheint der Nettowechsel (alt -> neu) als ein Schritt.
     def timeline_for(journals)
-      previous = nil
       journals.filter_map do |journal|
-        status_id = journal.data.try(:status_id)
-        next if status_id.nil? || status_id == previous
+        change = journal.details["status_id"]
+        next if change.blank? || change.first == change.last
 
-        previous = status_id
-        Step.new(at: journal.created_at, status: status_names[status_id], user: journal.user&.name)
+        Step.new(at: journal.created_at, status: status_names[change.last],
+                 from: change.first && status_names[change.first], user: journal.user&.name)
       end
     end
 

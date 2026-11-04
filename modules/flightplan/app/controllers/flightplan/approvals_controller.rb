@@ -8,6 +8,7 @@ module Flightplan
     before_action :reject_non_session_access, only: :create
     before_action :require_admin
     before_action :reject_agent_user, only: :create
+    before_action :reject_non_human, only: :create
     no_authorization_required! :index, :create
 
     layout "global"
@@ -75,6 +76,12 @@ module Flightplan
 
     def reject_agent_user
       render_403 if Flightplan::Approvals.agent_user?(User.current)
+    end
+
+    # Allowlist statt nur Sperrliste: ein Admin ohne Eintrag in FLIGHTPLAN_HUMAN_LOGINS gibt nicht frei.
+    # Ist die Liste leer, gibt niemand frei.
+    def reject_non_human
+      render_403 unless Flightplan::Approvals.human?(User.current)
     end
   end
 end

@@ -64,6 +64,13 @@ en:
       progress: Subtasks
       progress_label: "%{done} of %{total} done"
       runs: Agent runs
+      langfuse: Langfuse
+      langfuse_traces: "Traces for op-%{id}"
+      langfuse_branch: "Traces for the branch"
+      langfuse_hint: "The link opens %{host} in the maintainer browser and only works through their SSH tunnel. Without the tunnel the page stays empty."
+      chat_unreachable: "Chat not reachable. The chat proxy or service is not running, or the SSH tunnel to port 8092 is missing."
+      chat_reload: "Reload"
+      chat_admin_only: "Chat for admins only."
       runs_empty: No claims or starts.
       agent: Agent
       questions: Open questions
@@ -74,6 +81,7 @@ en:
       menu: ADA Dashboard
       title: ADA Dashboard
       not_active: not active
+      missing_status: "Status \"%{name}\" not found. Counts and approval for this status are incomplete until it is named that again."
       stale: "stale (%{age})"
       inactive:
         missing: The source file is missing.
@@ -128,6 +136,9 @@ en:
       none: Nothing was selected.
       done: "%{ok} approved, %{rejected} rejected."
       done_with_reasons: "%{ok} approved, %{rejected} rejected: %{reasons}"
+      unavailable:
+        disabled: "Approval is switched off: %{env} is empty, nobody may approve."
+        not_human: "This account is not listed in %{env}. Only listed admin accounts may approve."
       hint: "Only sets the status to Startfreigabe as the signed-in human. ada-dispatch starts the work later."
       reasons:
         invalid_id: Invalid number

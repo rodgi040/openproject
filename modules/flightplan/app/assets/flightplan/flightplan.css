@@ -294,6 +294,18 @@
   margin: 1rem 0 0.5rem;
 }
 
+.fp-dash-warning {
+  background: var(--bgColor-attention-muted, #fff8c5);
+  border: 1px solid var(--borderColor-attention-muted, #d4a72c);
+  border-radius: 6px;
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+}
+
+.fp-timeline-from {
+  color: var(--fgColor-muted, #59636e);
+}
+
 .fp-dash-hint {
   color: var(--fgColor-muted, #59636e);
   font-size: 0.85rem;

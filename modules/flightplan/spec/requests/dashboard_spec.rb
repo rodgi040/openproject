@@ -144,21 +144,71 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
       expect(queries.size).to eq(1)
     end
 
-    it "marks failed starts from the poller marker and the dispatch fallback, only within 14 days" do
-      loose_wp.journals.destroy_all
-      alarm = create(:work_package, project: ada, author: admin, status: waiting, subject: "Alarm Acht")
-      fallback = create(:work_package, project: ada, author: admin, status: waiting, subject: "Rueckfall Neun")
-      old = create(:work_package, project: ada, author: admin, status: waiting, subject: "Alt Zehn")
-      [alarm, fallback, old].each { |wp| backdate(wp, 1.day.ago) }
-      alarm.journals.last.update_columns(notes: "Start nicht bestätigt.\n<!-- fp-op-alarm:start:#{alarm.id} -->")
-      fallback.journals.last.update_columns(notes: "ada-dispatch: Start fehlgeschlagen (boom). Bitte prüfen.")
-      old.journals.last.update_columns(notes: "<!-- fp-op-alarm:start:#{old.id} -->", created_at: 20.days.ago)
-      get "/flightplan/dashboard"
-      table = response.body[/data-bereich-table="ADA MAIN">.*?<\/table>/m]
-      expect(table[/<tr data-wp="#{alarm.id}">.*?<\/tr>/m]).to include("Start fehlgeschlagen")
-      expect(table[/<tr data-wp="#{fallback.id}">.*?<\/tr>/m]).to include("Start fehlgeschlagen")
-      expect(table[/<tr data-wp="#{old.id}">.*?<\/tr>/m]).not_to include("fp-dash-reason")
-      expect(table[/<tr data-wp="#{waiting_wp.id}">.*?<\/tr>/m]).not_to include("fp-dash-reason")
+    describe "failed starts" do
+      let!(:dispatcher) { create(:user, login: "dispatcher") }
+      let(:alarm) { create(:work_package, project: ada, author: admin, status: waiting, subject: "Alarm Acht") }
+      let(:fallback) { create(:work_package, project: ada, author: admin, status: waiting, subject: "Rueckfall Neun") }
+      let(:old) { create(:work_package, project: ada, author: admin, status: waiting, subject: "Alt Zehn") }
+
+      def row(id)
+        response.body[/data-bereich-table="ADA MAIN">.*?<\/table>/m][/<tr data-wp="#{id}">.*?<\/tr>/m]
+      end
+
+      def note(work_package, text, user: dispatcher, at: nil)
+        journal = work_package.journals.order(:version).last
+        journal.update_columns(notes: text, user_id: user.id, **(at ? { created_at: at } : {}))
+      end
+
+      it "marks the poller marker and the dispatch fallback from dispatcher, only within 14 days" do
+        loose_wp.journals.destroy_all
+        [alarm, fallback, old].each { |wp| backdate(wp, 1.day.ago) }
+        note(alarm, "Start nicht bestätigt.\n<!-- fp-op-alarm:start:#{alarm.id} -->")
+        note(fallback, "ada-dispatch: Start fehlgeschlagen (boom). Bitte prüfen.")
+        note(old, "<!-- fp-op-alarm:start:#{old.id} -->", at: 20.days.ago)
+        get "/flightplan/dashboard"
+        expect(row(alarm.id)).to include("Start fehlgeschlagen")
+        expect(row(fallback.id)).to include("Start fehlgeschlagen")
+        expect(row(old.id)).not_to include("fp-dash-reason")
+        expect(row(waiting_wp.id)).not_to include("fp-dash-reason")
+      end
+
+      it "gives no false alarm for a note from another author" do
+        loose_wp.journals.destroy_all
+        backdate(alarm, 1.day.ago)
+        note(alarm, "<!-- fp-op-alarm:start:#{alarm.id} -->", user: agent)
+        get "/flightplan/dashboard"
+        expect(row(alarm.id)).not_to include("Start fehlgeschlagen")
+      end
+
+      it "gives no false alarm for a note older than the last entry into Wartet auf Mensch" do
+        loose_wp.journals.destroy_all
+        earlier = create(:work_package, project: ada, author: admin, status: in_arbeit, subject: "Wieder Elf")
+        backdate(earlier, 6.days.ago)
+        note(earlier, "<!-- fp-op-alarm:start:#{earlier.id} -->")
+        User.execute_as(admin) { earlier.reload.update!(status: waiting) }
+        expect(earlier.journals.count).to eq(2)
+        get "/flightplan/dashboard"
+        expect(row(earlier.id)).not_to include("Start fehlgeschlagen")
+        expect(row(earlier.id)).to include("Wartet auf Mensch")
+      end
+    end
+
+    describe "a renamed status" do
+      it "warns visibly, caches nothing and reports it for dashboard-check" do
+        ensure_status("Geplant")
+        startfreigabe.update!(name: "Startfreigabe neu")
+        Rails.cache.clear
+        get "/flightplan/dashboard"
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include("data-fp-missing-status=\"Startfreigabe\"", "Status „Startfreigabe“ nicht gefunden")
+        expect(Rails.cache.read(Flightplan::Dashboard::STATUS_IDS_CACHE_KEY)).to be_nil
+        expect(Rails.cache.read(["flightplan-dashboard", admin.id])).to be_nil
+        expect(Flightplan::Dashboard.check_report(user: admin)[:missing_statuses]).to eq(["Startfreigabe"])
+        startfreigabe.update!(name: "Startfreigabe")
+        get "/flightplan/dashboard"
+        expect(response.body).not_to include("data-fp-missing-status")
+        expect(Flightplan::Dashboard.check_report(user: admin)[:missing_statuses]).to eq([])
+      end
     end
 
     it "keeps the age column on one line through the stylesheet, not inline" do

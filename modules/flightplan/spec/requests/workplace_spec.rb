@@ -24,7 +24,7 @@ RSpec.describe "Flightplan workplace", :skip_csrf,
   end
   let(:project) { create(:project, name: "Workplace Probe", public: false) }
   let(:hidden) { create(:project, name: "Workplace Secret", public: false) }
-  let(:member) { create(:user, member_with_roles: { project => role }) }
+  let(:member) { create(:user, language: "de", member_with_roles: { project => role }) }
   let!(:neu) { ensure_status("Neu") }
   let!(:geplant) { ensure_status("Geplant") }
   let!(:in_arbeit) { ensure_status("In Arbeit") }
@@ -80,11 +80,97 @@ RSpec.describe "Flightplan workplace", :skip_csrf,
     expect(response.body).to include('data-role="child"', "W11 Kind offen", "W11 Kind fertig")
     expect(response.body).to include('data-fp-progress', 'data-done="1"', 'data-total="2"')
     expect(response.body).to include('data-kind="start"', 'data-kind="claim"', "w11-session")
-    expect(response.body).to include("/chat/embed/#{package.id}")
     expect(response.body).not_to include("'*'")
     header = response.headers["Content-Security-Policy"].to_s
     expect(header).to include("frame-src")
     expect(header).to include("http://localhost:8092")
+    expect(header[/connect-src[^;]*/]).to include("http://localhost:8092")
+  end
+
+  describe "chat" do
+    it "shows non-admins a notice instead of the iframe" do
+      get "/flightplan/work_packages/#{package.id}"
+      expect(response.body).to include("data-fp-chat-admin-only", "Chat nur für Admins.")
+      expect(response.body).not_to include("<iframe", "/chat/embed/")
+    end
+
+    context "as admin" do
+      let(:member) do
+        create(:admin, language: "de", member_with_roles: { project => role })
+      end
+
+      it "renders the frame lazily with an unreachable notice and reload button, no inline script" do
+        get "/flightplan/work_packages/#{package.id}"
+        expect(response.body).to include(%(data-src="http://localhost:8092/chat/embed/#{package.id}"))
+        expect(response.body).to include("data-fp-chat-offline", "Chat nicht erreichbar", "data-fp-chat-reload", "Neu laden")
+        expect(response.body[/<iframe[^>]*>/]).not_to include(" src=")
+        expect(response.body).not_to include("data-fp-chat-admin-only")
+        expect(response.body[/<div class="fp-chat-offline"[^>]*>/]).to include("hidden")
+      end
+    end
+  end
+
+  describe "Langfuse link" do
+    around do |example|
+      saved = ENV.values_at("FLIGHTPLAN_LANGFUSE_URL", "FLIGHTPLAN_LANGFUSE_PROJECT")
+      example.run
+    ensure
+      saved.zip(%w[FLIGHTPLAN_LANGFUSE_URL FLIGHTPLAN_LANGFUSE_PROJECT]).each { |v, k| v ? ENV[k] = v : ENV.delete(k) }
+    end
+
+    before do
+      ENV.delete("FLIGHTPLAN_LANGFUSE_URL")
+      ENV.delete("FLIGHTPLAN_LANGFUSE_PROJECT")
+    end
+
+    it "shows no link without configuration" do
+      get "/flightplan/work_packages/#{package.id}"
+      expect(response.body).not_to include("data-fp-langfuse", "3200")
+    end
+
+    it "links the trace search for op-<id> and the branch, with the tunnel hint" do
+      ENV["FLIGHTPLAN_LANGFUSE_URL"] = "http://localhost:3200/"
+      ENV["FLIGHTPLAN_LANGFUSE_PROJECT"] = "factory"
+      get "/flightplan/work_packages/#{package.id}"
+      body = response.body
+      expect(body).to include("data-fp-langfuse",
+                              %(href="http://localhost:3200/project/factory/traces?search=op-#{package.id}"),
+                              "search=feature%2Fw11-probe", "SSH-Tunnel", "localhost:3200")
+      expect(body).to include('rel="noopener noreferrer"')
+    end
+
+    it "refuses a URL that is not http(s) or carries credentials" do
+      ["javascript:alert(1)", "http://user:pw@localhost:3200"].each do |bad|
+        ENV["FLIGHTPLAN_LANGFUSE_URL"] = bad
+        get "/flightplan/work_packages/#{package.id}"
+        expect(response.body).not_to include("data-fp-langfuse")
+      end
+    end
+  end
+
+  describe "timeline per change" do
+    it "shows the previous status of every change" do
+      get "/flightplan/work_packages/#{package.id}"
+      timeline = response.body[/data-fp-timeline>(.*?)<\/ol>/m, 1]
+      expect(timeline).to include("Neu →", "Geplant →", "In Arbeit →")
+      expect(timeline.scan("<li ").size).to eq(4)
+    end
+
+    it "documents the limit: changes merged by the journal aggregation appear as one net change",
+       with_settings: { journal_aggregation_time_minutes: 5 } do
+      quick = create(:work_package, project:, author: member, status: neu, subject: "W11 Schnell")
+      [geplant, in_arbeit].permutation(2).each do |from, to|
+        create(:workflow, type: quick.type, role:, old_status: from, new_status: to)
+      end
+      create(:workflow, type: quick.type, role:, old_status: neu, new_status: geplant)
+      create(:workflow, type: quick.type, role:, old_status: neu, new_status: in_arbeit)
+      change_status(quick, geplant)
+      change_status(quick, in_arbeit)
+      get "/flightplan/work_packages/#{quick.id}"
+      timeline = response.body[/data-fp-timeline>(.*?)<\/ol>/m, 1]
+      expect(timeline).to include('data-status="In Arbeit"')
+      expect(timeline).not_to include('data-status="Geplant"')
+    end
   end
 
   it "hides a package the user cannot see" do

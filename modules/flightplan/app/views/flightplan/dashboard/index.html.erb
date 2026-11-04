@@ -11,6 +11,12 @@
 %>
 
 <div id="fp-dashboard" class="fp-dash">
+  <% @dashboard.missing_statuses.each do |name| %>
+    <p class="fp-dash-warning" role="alert" data-fp-missing-status="<%= name %>"><%= t("flightplan.dashboard.missing_status", name:) %></p>
+  <% end %>
+  <% if @approval_state && @approval_state != :ok %>
+    <p class="fp-dash-hint" id="fp-approval-off" data-state="<%= @approval_state %>"><%= t("flightplan.approvals.unavailable.#{@approval_state}", env: Flightplan::Approvals::HUMAN_LOGINS_ENV) %></p>
+  <% end %>
   <section class="fp-dash-attention" aria-labelledby="fp-dash-attention-title">
     <h2 id="fp-dash-attention-title"><%= t("flightplan.dashboard.attention.title") %></h2>
     <p class="fp-dash-hint"><%= t("flightplan.dashboard.attention.hint", days: Flightplan::Dashboard::STALE_DAYS) %></p>
@@ -29,7 +35,7 @@
     </nav>
 
     <% groups = @dashboard.groups %>
-    <% any_approvable = groups.any? { |group| group[:rows].any? { |row| row[:approvable] } } %>
+    <% any_approvable = @approval_state == :ok && groups.any? { |group| group[:rows].any? { |row| row[:approvable] } } %>
     <%= form_with url: flightplan_approvals_create_path, method: :post, id: "fp-approve-form", local: true, data: { turbo: false } do %>
     <%= hidden_field_tag :bereich, @dashboard.selected_bereich, id: nil %>
     <% if any_approvable %>
