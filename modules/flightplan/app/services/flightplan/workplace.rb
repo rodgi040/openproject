@@ -7,6 +7,7 @@ module Flightplan
     CHAT_ORIGIN = "http://localhost:8092"
     PREVIEW = 280
     COMMENT_LIMIT = 5
+    TIMELINE_LIMIT = 100
     START_STATUSES = ["In Arbeit", "Startfreigabe"].freeze
     CLAIM_NOTE = /\Aclaim\s+(\S+)/
     START_NOTE = /\Astart\b/i
@@ -18,7 +19,7 @@ module Flightplan
       :work_package, :subject, :status, :project_name, :project_identifier,
       :description, :description_full, :labels, :agent, :involved,
       :questions, :branch, :pull_request, :comments,
-      :timeline, :tree, :progress, :runs, :context, :chat_questions, :langfuse,
+      :timeline, :timeline_cut, :tree, :progress, :runs, :context, :chat_questions, :langfuse,
       keyword_init: true
     )
     Person = Struct.new(:name, :group, keyword_init: true)
@@ -63,6 +64,7 @@ module Flightplan
         pull_request: pull_request_for(notes),
         comments: notes.map { |journal| comment_for(journal) },
         timeline: timeline_for(journals),
+        timeline_cut: journals.size > TIMELINE_LIMIT,
         tree: tree_for(parent, children),
         progress: progress_for(children),
         runs: runs_for(journals),
@@ -170,19 +172,28 @@ module Flightplan
       @status_names ||= Status.pluck(:id, :name).to_h
     end
 
-    # Jeder Statuswechsel einzeln, gelesen aus dem Diff des Journals (journal.details["status_id"] = [alt, neu]),
-    # nicht aus dem Vergleich zweier Zeilen. Grenze: OpenProject fasst Änderungen desselben Nutzers innerhalb von
+    # Jeder Statuswechsel einzeln, gelesen aus dem Status-Stand je Journal (journal.data.status_id, geladen über
+    # includes(:data)) und im Speicher mit dem Vorgänger verglichen; journal.details würde je Journal alle Differ
+    # starten und den Vorgänger nachladen. Es zählen nur die letzten TIMELINE_LIMIT Journale (der Vorgänger davor
+    # dient nur als Vergleichsstand). Grenze: OpenProject fasst Änderungen desselben Nutzers innerhalb von
     # journal_aggregation_time_minutes (Standard 5 min) in einem Journal zusammen und überschreibt dabei dessen
     # Daten; ein Zwischenstatus, den kein Journal je als Endstand gespeichert hat, ist nicht mehr zu lesen. Dann
     # erscheint der Nettowechsel (alt -> neu) als ein Schritt.
     def timeline_for(journals)
-      journals.filter_map do |journal|
-        change = journal.details["status_id"]
-        next if change.blank? || change.first == change.last
+      previous = nil
+      first_shown = [journals.size - TIMELINE_LIMIT, 0].max
+      steps = []
+      journals.each_with_index do |journal, index|
+        status_id = journal.data.try(:status_id)
+        next if status_id.nil?
 
-        Step.new(at: journal.created_at, status: status_names[change.last],
-                 from: change.first && status_names[change.first], user: journal.user&.name)
+        if status_id != previous && index >= first_shown
+          steps << Step.new(at: journal.created_at, status: status_names[status_id],
+                            from: previous && status_names[previous], user: journal.user&.name)
+        end
+        previous = status_id
       end
+      steps
     end
 
     def tree_for(parent, children)

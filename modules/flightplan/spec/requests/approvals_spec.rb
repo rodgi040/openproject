@@ -254,6 +254,16 @@ RSpec.describe "Flightplan approvals", type: :rails_request do
       expect(op_wp.reload.status).to eq(waiting)
     end
 
+    it "compares logins without regard to case or surrounding blanks" do
+      ENV["FLIGHTPLAN_HUMAN_LOGINS"] = " #{admin.login.upcase} , x "
+      expect(Flightplan::Approvals.human_logins).to eq([admin.login.downcase, "x"])
+      expect(Flightplan::Approvals.human?(admin)).to be(true)
+      upper = create(:admin, login: "MENSCH-X", password: PASSWORD, password_confirmation: PASSWORD,
+                             member_with_roles: { project => role })
+      ENV["FLIGHTPLAN_HUMAN_LOGINS"] = "mensch-x"
+      expect(Flightplan::Approvals.human?(upper)).to be(true)
+    end
+
     it "defaults to admin when the variable is unset, and keeps the agent blocklist on top" do
       ENV.delete("FLIGHTPLAN_HUMAN_LOGINS")
       expect(Flightplan::Approvals.human_logins).to eq(["admin"])

@@ -87,6 +87,13 @@ RSpec.describe "Flightplan workplace", :skip_csrf,
     expect(header[/connect-src[^;]*/]).to include("http://localhost:8092")
   end
 
+  it "adds connect-src for the chat only on Flightplan controllers, not on other pages" do
+    get "/projects"
+    expect(response).to have_http_status(:ok)
+    header = response.headers["Content-Security-Policy"].to_s
+    expect(header[/connect-src[^;]*/].to_s).not_to include("http://localhost:8092")
+  end
+
   describe "chat" do
     it "shows non-admins a notice instead of the iframe" do
       get "/flightplan/work_packages/#{package.id}"
@@ -170,6 +177,43 @@ RSpec.describe "Flightplan workplace", :skip_csrf,
       timeline = response.body[/data-fp-timeline>(.*?)<\/ol>/m, 1]
       expect(timeline).to include('data-status="In Arbeit"')
       expect(timeline).not_to include('data-status="Geplant"')
+    end
+  end
+
+  describe "timeline cost" do
+    def count_queries
+      queries = []
+      callback = ->(*, payload) { queries << payload[:sql] unless payload[:name] == "SCHEMA" }
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        get "/flightplan/work_packages/#{package.id}"
+      end
+      expect(response).to have_http_status(:ok)
+      queries.size
+    end
+
+    it "needs a constant number of queries, however many journals the package has" do
+      get "/flightplan/work_packages/#{package.id}" # warm caches
+      few = count_queries
+      25.times do
+        change_status(package, geplant)
+        change_status(package, in_arbeit)
+      end
+      expect(package.journals.count).to be > 50
+      many = count_queries
+      expect(many).to be <= few + 2
+    end
+
+    it "shows only the last 100 journals and says the list is cut" do
+      get "/flightplan/work_packages/#{package.id}"
+      expect(response.body).not_to include("data-fp-timeline-cut")
+      52.times do
+        change_status(package, geplant)
+        change_status(package, in_arbeit)
+      end
+      get "/flightplan/work_packages/#{package.id}"
+      timeline = response.body[/data-fp-timeline>(.*?)<\/ol>/m, 1]
+      expect(timeline.scan("<li ").size).to eq(100)
+      expect(response.body).to include("data-fp-timeline-cut", "Gekürzt")
     end
   end
 

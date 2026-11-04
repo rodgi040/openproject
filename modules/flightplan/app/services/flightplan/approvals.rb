@@ -25,13 +25,13 @@ module Flightplan
 
     # Rejection = [id_or_nil, reason_key]
     def self.agent_user?(user)
-      return true if AGENT_LOGINS.include?(user.login.to_s)
+      return true if AGENT_LOGINS.include?(user.login.to_s.downcase)
 
       GroupUser.where(user_id: user.id, group_id: Group.where(lastname: AGENT_GROUPS).select(:id)).exists?
     end
 
     def self.human_logins
-      ENV.fetch(HUMAN_LOGINS_ENV, DEFAULT_HUMAN_LOGINS).to_s.split(",").map(&:strip).compact_blank.uniq
+      ENV.fetch(HUMAN_LOGINS_ENV, DEFAULT_HUMAN_LOGINS).to_s.split(",").map { |login| login.strip.downcase }.compact_blank.uniq
     end
 
     def self.allowlist_empty?
@@ -40,7 +40,7 @@ module Flightplan
 
     # Als Mensch markiert: Login steht in der Allowlist und ist kein Agent-Konto.
     def self.human?(user)
-      user.logged? && human_logins.include?(user.login.to_s) && !agent_user?(user)
+      user.logged? && human_logins.include?(user.login.to_s.downcase) && !agent_user?(user)
     end
 
     # :ok, :disabled (Allowlist leer) oder :not_human (Konto nicht in der Allowlist). Für den Hinweis der Seite.

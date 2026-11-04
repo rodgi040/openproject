@@ -357,14 +357,24 @@
     helloSeen = false;
     window.clearTimeout(helloTimer);
     if (offline) offline.hidden = true;
-    fetch(origin + "/chat/", { mode: "no-cors", cache: "no-store" }).then(function () {
+    // Der fp:hello-Timer läuft unabhängig vom Ergebnis des fetch; der fetch bricht nach 8 s ab.
+    window.clearTimeout(helloTimer);
+    helloTimer = window.setTimeout(function () {
+      if (!helloSeen) showOffline();
+    }, 15000);
+    var controller = typeof AbortController === "function" ? new AbortController() : null;
+    var abortTimer = controller ? window.setTimeout(function () { controller.abort(); }, 8000) : null;
+    var options = { mode: "no-cors", cache: "no-store" };
+    if (controller) options.signal = controller.signal;
+    fetch(origin + "/chat/", options).then(function () {
+      window.clearTimeout(abortTimer);
       frame.removeAttribute("src");
       frame.hidden = false;
       frame.src = frame.dataset.src;
-      helloTimer = window.setTimeout(function () {
-        if (!helloSeen) showOffline();
-      }, 15000);
-    }).catch(showOffline);
+    }).catch(function () {
+      window.clearTimeout(abortTimer);
+      showOffline();
+    });
   }
 
   if (frame) {

@@ -35,6 +35,9 @@
         </li>
       <% end %>
     </ol>
+    <% if @place.timeline_cut %>
+      <p class="fp-hint" data-fp-timeline-cut><%= t("flightplan.workplace.timeline_cut", count: Flightplan::Workplace::TIMELINE_LIMIT) %></p>
+    <% end %>
 
     <h2><%= t("flightplan.workplace.tree") %></h2>
     <ul class="fp-tree" data-fp-tree>

@@ -60,6 +60,7 @@ en:
       relations: Relations
       info: Ticket
       timeline: Status
+      timeline_cut: "Cut: only the last %{count} changes of the ticket."
       tree: Dependencies
       progress: Subtasks
       progress_label: "%{done} of %{total} done"
