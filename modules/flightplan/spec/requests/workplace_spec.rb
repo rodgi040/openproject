@@ -87,6 +87,16 @@ RSpec.describe "Flightplan workplace", :skip_csrf,
     expect(header[/connect-src[^;]*/]).to include("http://localhost:8092")
   end
 
+  it "says so in the empty states instead of a bare dash" do
+    lonely = create(:work_package, project:, author: member, status: neu, subject: "W11 Allein")
+    get "/flightplan/work_packages/#{lonely.id}"
+    expect(response).to have_http_status(:ok), response.body
+    expect(response.body[/data-fp-progress-empty>(.*?)<\/p>/m, 1]).to eq("Keine Unteraufgaben")
+    expect(response.body).not_to include("0 von 0 fertig")
+    expect(response.body[/data-fp-questions-empty>(.*?)<\/p>/m, 1]).to eq("Keine offenen Rückfragen")
+    expect(response.body[/data-fp-comments-empty>(.*?)<\/p>/m, 1]).to eq("Noch keine Kommentare")
+  end
+
   it "adds connect-src for the chat only on Flightplan controllers, not on other pages" do
     get "/projects"
     expect(response).to have_http_status(:ok)

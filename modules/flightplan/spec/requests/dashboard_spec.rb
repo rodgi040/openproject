@@ -103,6 +103,31 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
       expect(response.body).to include("fp-dash-empty")
     end
 
+    it "names the Bereich in the empty state" do
+      get "/flightplan/dashboard", params: { bereich: "nuovagen" }
+      expect(response.body[/id="fp-dash-empty">(.*?)<\/p>/m, 1]).to eq("Nichts offen in NuovaGen")
+      expect(response.body).not_to include("fp-unknown-bereich")
+    end
+
+    it "wraps the attention table in a scroll container for narrow screens" do
+      get "/flightplan/dashboard"
+      expect(response.body).to match(/<div class="fp-dash-scroll">\s*<table class="fp-dash-table"/)
+      css = File.read(File.expand_path("../../app/assets/flightplan/flightplan.css", __dir__))
+      expect(css[/\.fp-dash-scroll \{[^}]*\}/m]).to include("overflow-x: auto")
+      expect(response.body).not_to match(/<div class="fp-dash-scroll"[^>]*style=/)
+    end
+
+    it "hints at an unknown Bereich key, escaped, and shows all areas" do
+      get "/flightplan/dashboard", params: { bereich: "<b>x</b>'" }
+      expect(response).to have_http_status(:ok)
+      hint = response.body[/id="fp-unknown-bereich"[^>]*>(.*?)<\/p>/m, 1]
+      expect(hint).to include("Unbekannter Bereich „")
+      expect(hint).to include("alle Bereiche gezeigt")
+      expect(hint).to include("&lt;b&gt;x&lt;/b&gt;")
+      expect(response.body).not_to include("<b>x</b>")
+      expect(response.body).to include("Wartet Eins")
+    end
+
     it "escapes ticket titles" do
       get "/flightplan/dashboard"
       expect(response.body).not_to include("<script>alert(1)</script>")

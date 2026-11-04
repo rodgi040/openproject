@@ -64,6 +64,9 @@ de:
       tree: Abhängigkeiten
       progress: Unteraufgaben
       progress_label: "%{done} von %{total} fertig"
+      progress_empty: Keine Unteraufgaben
+      questions_empty: Keine offenen Rückfragen
+      comments_empty: Noch keine Kommentare
       runs: Agent-Läufe
       langfuse: Langfuse
       langfuse_traces: "Traces zu op-%{id}"
@@ -104,6 +107,8 @@ de:
         title: Aufmerksamkeit
         hint: "Wartet auf Mensch, offene Rückfragen, Startfreigabe-Kandidaten und „In Arbeit“ ohne Änderung seit mehr als %{days} Tagen. Das Alter zählt ab dem letzten Statuswechsel, bei Rückfragen ab der Frage."
         empty: Nichts wartet auf dich.
+        empty_bereich: "Nichts offen in %{name}"
+        unknown_bereich: "Unbekannter Bereich „%{name}“, alle Bereiche gezeigt"
         project: Projekt
         id: "#id"
         subject: Titel

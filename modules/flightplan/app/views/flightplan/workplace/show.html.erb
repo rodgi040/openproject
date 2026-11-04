@@ -66,18 +66,22 @@
     </ul>
 
     <h2><%= t("flightplan.workplace.progress") %></h2>
-    <div class="fp-progress"
-         role="progressbar"
-         aria-valuemin="0"
-         aria-valuemax="<%= @place.progress.total %>"
-         aria-valuenow="<%= @place.progress.done %>"
-         aria-label="<%= t("flightplan.workplace.progress_label", done: @place.progress.done, total: @place.progress.total) %>"
-         data-fp-progress
-         data-done="<%= @place.progress.done %>"
-         data-total="<%= @place.progress.total %>">
-      <span style="width: <%= @place.progress.percent %>%"></span>
-    </div>
-    <p><%= t("flightplan.workplace.progress_label", done: @place.progress.done, total: @place.progress.total) %></p>
+    <% if @place.progress.total.zero? %>
+      <p data-fp-progress-empty><%= t("flightplan.workplace.progress_empty") %></p>
+    <% else %>
+      <div class="fp-progress"
+           role="progressbar"
+           aria-valuemin="0"
+           aria-valuemax="<%= @place.progress.total %>"
+           aria-valuenow="<%= @place.progress.done %>"
+           aria-label="<%= t("flightplan.workplace.progress_label", done: @place.progress.done, total: @place.progress.total) %>"
+           data-fp-progress
+           data-done="<%= @place.progress.done %>"
+           data-total="<%= @place.progress.total %>">
+        <span style="width: <%= @place.progress.percent %>%"></span>
+      </div>
+      <p><%= t("flightplan.workplace.progress_label", done: @place.progress.done, total: @place.progress.total) %></p>
+    <% end %>
 
     <h2><%= t("flightplan.workplace.runs") %></h2>
     <% if @place.runs.empty? %>
@@ -136,7 +140,7 @@
 
     <h2><%= t("flightplan.workplace.questions") %></h2>
     <% if @place.questions.empty? %>
-      <p>–</p>
+      <p data-fp-questions-empty><%= t("flightplan.workplace.questions_empty") %></p>
     <% else %>
       <ul>
         <% @place.questions.each do |question| %>
@@ -158,7 +162,7 @@
 
     <h2><%= t("flightplan.questions.comments") %></h2>
     <% if @place.comments.empty? %>
-      <p>–</p>
+      <p data-fp-comments-empty><%= t("flightplan.workplace.comments_empty") %></p>
     <% else %>
       <ul data-fp-comments>
         <% @place.comments.each do |comment| %>

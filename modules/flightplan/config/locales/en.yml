@@ -64,6 +64,9 @@ en:
       tree: Dependencies
       progress: Subtasks
       progress_label: "%{done} of %{total} done"
+      progress_empty: No subtasks
+      questions_empty: No open questions
+      comments_empty: No comments yet
       runs: Agent runs
       langfuse: Langfuse
       langfuse_traces: "Traces for op-%{id}"
@@ -104,6 +107,8 @@ en:
         title: Attention
         hint: "Waiting for a human, open questions, start-approval candidates and in-progress items unchanged for more than %{days} days. Age counts from the last status change, for questions from the question."
         empty: Nothing is waiting for you.
+        empty_bereich: "Nothing open in %{name}"
+        unknown_bereich: "Unknown area “%{name}”, showing all areas"
         project: Project
         id: "#id"
         subject: Title

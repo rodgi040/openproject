@@ -21,6 +21,10 @@
     <h2 id="fp-dash-attention-title"><%= t("flightplan.dashboard.attention.title") %></h2>
     <p class="fp-dash-hint"><%= t("flightplan.dashboard.attention.hint", days: Flightplan::Dashboard::STALE_DAYS) %></p>
 
+    <% if (unknown = @dashboard.unknown_bereich) %>
+      <p class="fp-dash-hint" id="fp-unknown-bereich" role="status"><%= t("flightplan.dashboard.attention.unknown_bereich", name: unknown) %></p>
+    <% end %>
+
     <nav class="fp-chips" aria-label="<%= t("flightplan.board.bereiche") %>">
       <%= link_to flightplan_dashboard_path, class: "fp-chip #{'is-on' if @dashboard.selected_bereich.nil?}", data: { bereich: "all", turbo: false } do %>
         <%= t("flightplan.board.all") %>
@@ -45,11 +49,16 @@
       </p>
     <% end %>
     <% if groups.empty? || groups.all? { |group| group[:rows].empty? } %>
-      <p id="fp-dash-empty"><%= t("flightplan.dashboard.attention.empty") %></p>
+      <% if @dashboard.selected_bereich %>
+        <p id="fp-dash-empty"><%= t("flightplan.dashboard.attention.empty_bereich", name: Flightplan::Dashboard::BEREICHE[@dashboard.selected_bereich]) %></p>
+      <% else %>
+        <p id="fp-dash-empty"><%= t("flightplan.dashboard.attention.empty") %></p>
+      <% end %>
     <% end %>
     <% groups.each do |group| %>
       <% next if group[:rows].empty? %>
       <h3 class="fp-dash-group" data-bereich-group="<%= group[:label] %>"><%= group[:label] %> <span class="fp-badge"><%= group[:rows].size %></span></h3>
+      <div class="fp-dash-scroll">
       <table class="fp-dash-table" data-bereich-table="<%= group[:label] %>">
         <thead>
           <tr>
@@ -89,6 +98,7 @@
           <% end %>
         </tbody>
       </table>
+      </div>
     <% end %>
     <% end %>
   </section>

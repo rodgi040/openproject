@@ -67,6 +67,14 @@ module Flightplan
       BEREICHE.key?(key) ? key : nil
     end
 
+    # Nicht leerer, aber unbekannter Bereichsschlüssel (für den Hinweis); gekürzt, damit die Seite stabil bleibt.
+    def unknown_bereich
+      key = @raw["bereich"].to_s.strip
+      return nil if key.empty? || BEREICHE.key?(key)
+
+      key.truncate(60)
+    end
+
     def bereich_choices
       BEREICHE.map do |key, label|
         { key:, label:, count: @rows.count { |row| row[:bereich] == label }, selected: key == selected_bereich }

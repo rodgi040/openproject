@@ -439,3 +439,29 @@
 .fp-dash-stats dd {
   margin: 0;
 }
+
+/* S6c: schmale Bildschirme. Die Aufmerksamkeitstabelle scrollt waagerecht im eigenen Container. */
+.fp-dash-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+@media (max-width: 640px) {
+  .fp-dash-table td:nth-child(1),
+  .fp-dash-table td:nth-child(3) {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    min-width: 6rem;
+  }
+
+  .fp-dash-table th,
+  .fp-dash-table td {
+    padding: 0.3rem 0.35rem;
+  }
+
+  .fp-dash-table td:nth-child(4),
+  .fp-dash-table td:nth-child(5),
+  .fp-dash-table td:nth-child(6) {
+    white-space: nowrap;
+  }
+}
