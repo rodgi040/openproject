@@ -288,3 +288,101 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ADA Dashboard (S4). Keine externen Hosts, keine Schriften von außen. */
+.fp-dash h2 {
+  margin: 1rem 0 0.5rem;
+}
+
+.fp-dash-hint {
+  color: var(--fgColor-muted, #59636e);
+  font-size: 0.85rem;
+  margin: 0.15rem 0 0.5rem;
+}
+
+.fp-dash-group {
+  margin: 1.1rem 0 0.4rem;
+}
+
+.fp-dash-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.fp-dash-table th,
+.fp-dash-table td {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--borderColor-muted, #d8dee4);
+  vertical-align: top;
+}
+
+.fp-dash-reason {
+  margin-left: 0.3rem;
+  color: var(--fgColor-muted, #59636e);
+  font-size: 0.8rem;
+}
+
+.fp-dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.75rem;
+}
+
+.fp-dash-tile {
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  background: var(--bgColor-default, #ffffff);
+}
+
+.fp-dash-tile h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+}
+
+.fp-dash-tile ul {
+  list-style: none;
+  margin: 0.3rem 0 0;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.fp-dash-tile li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.fp-dash-num {
+  font-weight: 600;
+}
+
+.fp-dash-off,
+.fp-dash-stale {
+  color: var(--fgColor-muted, #59636e);
+  font-style: italic;
+}
+
+.fp-dash-lamp {
+  border-radius: 999px;
+  padding: 0 0.5rem;
+  font-size: 0.8rem;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+}
+
+.fp-dash-lamp[data-lamp="gruen"] {
+  background: #dafbe1;
+  color: #116329;
+}
+
+.fp-dash-lamp[data-lamp="gelb"] {
+  background: #fff8c5;
+  color: #7d4e00;
+}
+
+.fp-dash-lamp[data-lamp="rot"] {
+  background: #ffebe9;
+  color: #a40e26;
+}

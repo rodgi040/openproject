@@ -1,0 +1,152 @@
+<% html_title(t("flightplan.dashboard.title")) %>
+<% snaps = @dashboard.snapshots %>
+<% color = ->(value) { Flightplan::DashboardSnapshots.color(value) } %>
+<% inactive = ->(source) { t("flightplan.dashboard.inactive.#{source.reason || :missing}", default: t("flightplan.dashboard.inactive.missing")) } %>
+
+<%=
+  render(Primer::OpenProject::PageHeader.new) do |header|
+    header.with_title { t("flightplan.dashboard.title") }
+    header.with_breadcrumbs(nil)
+  end
+%>
+
+<div id="fp-dashboard" class="fp-dash">
+  <section class="fp-dash-attention" aria-labelledby="fp-dash-attention-title">
+    <h2 id="fp-dash-attention-title"><%= t("flightplan.dashboard.attention.title") %></h2>
+    <p class="fp-dash-hint"><%= t("flightplan.dashboard.attention.hint", days: Flightplan::Dashboard::STALE_DAYS) %></p>
+
+    <nav class="fp-chips" aria-label="<%= t("flightplan.board.bereiche") %>">
+      <%= link_to flightplan_dashboard_path, class: "fp-chip #{'is-on' if @dashboard.selected_bereich.nil?}", data: { bereich: "all", turbo: false } do %>
+        <%= t("flightplan.board.all") %>
+        <span><%= @dashboard.total_count %></span>
+      <% end %>
+      <% @dashboard.bereich_choices.each do |choice| %>
+        <%= link_to flightplan_dashboard_path(bereich: choice[:key]), class: "fp-chip #{'is-on' if choice[:selected]}", data: { bereich: choice[:key], turbo: false } do %>
+          <%= choice[:label] %>
+          <span><%= choice[:count] %></span>
+        <% end %>
+      <% end %>
+    </nav>
+
+    <% groups = @dashboard.groups %>
+    <% if groups.empty? || groups.all? { |group| group[:rows].empty? } %>
+      <p id="fp-dash-empty"><%= t("flightplan.dashboard.attention.empty") %></p>
+    <% end %>
+    <% groups.each do |group| %>
+      <% next if group[:rows].empty? %>
+      <h3 class="fp-dash-group" data-bereich-group="<%= group[:label] %>"><%= group[:label] %> <span class="fp-badge"><%= group[:rows].size %></span></h3>
+      <table class="fp-dash-table" data-bereich-table="<%= group[:label] %>">
+        <thead>
+          <tr>
+            <th scope="col"><%= t("flightplan.dashboard.attention.project") %></th>
+            <th scope="col"><%= t("flightplan.dashboard.attention.id") %></th>
+            <th scope="col"><%= t("flightplan.dashboard.attention.subject") %></th>
+            <th scope="col"><%= t("flightplan.dashboard.attention.status") %></th>
+            <th scope="col"><%= t("flightplan.dashboard.attention.agent") %></th>
+            <th scope="col"><%= t("flightplan.dashboard.attention.age") %></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% group[:rows].each do |row| %>
+            <tr data-wp="<%= row[:id] %>">
+              <td><%= row[:project] %></td>
+              <td><%= link_to "##{row[:id]}", flightplan_workplace_path(row[:id]), data: { turbo: false } %></td>
+              <td><%= link_to row[:subject], flightplan_workplace_path(row[:id]), data: { turbo: false } %></td>
+              <td>
+                <span class="fp-badge" data-fp-status="<%= row[:status] %>"><%= row[:status] %></span>
+                <% row[:reasons].each do |reason| %>
+                  <span class="fp-dash-reason" data-reason="<%= reason %>"><%= t("flightplan.dashboard.reasons.#{reason}") %></span>
+                <% end %>
+              </td>
+              <td><%= row[:agent].presence || "–" %></td>
+              <td><time datetime="<%= row[:since].iso8601 %>"><%= Flightplan::Dashboard.age_label(row[:age_seconds]) %></time></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    <% end %>
+  </section>
+
+  <section class="fp-dash-tiles" aria-labelledby="fp-dash-tiles-title">
+    <h2 id="fp-dash-tiles-title"><%= t("flightplan.dashboard.tiles.title") %></h2>
+
+    <div class="fp-dash-grid">
+      <% @dashboard.tiles.each do |tile| %>
+        <article class="fp-dash-tile" data-tile="bereich" data-bereich-tile="<%= tile[:label] %>">
+          <h3><%= tile[:label] %></h3>
+          <p>
+            <span class="fp-dash-num"><%= tile[:open] %></span> <%= t("flightplan.dashboard.tiles.open") %>
+            · <span class="fp-dash-num"><%= tile[:blocked] %></span> <%= t("flightplan.dashboard.tiles.blocked") %>
+            · <span class="fp-dash-num"><%= tile[:in_progress] %></span> <%= t("flightplan.dashboard.tiles.in_progress") %>
+          </p>
+          <ul>
+            <% tile[:projects].each do |project| %>
+              <li>
+                <%= link_to project[:name], flightplan_board_path(projects: project[:identifier]), data: { turbo: false } %>
+                <span><%= project[:open] %> / <%= project[:blocked] %></span>
+              </li>
+            <% end %>
+          </ul>
+        </article>
+      <% end %>
+
+      <article class="fp-dash-tile" data-tile="health">
+        <h3><%= t("flightplan.dashboard.tiles.health") %></h3>
+        <% source = snaps[:health] %>
+        <% if source.inactive? %>
+          <p class="fp-dash-off"><%= t("flightplan.dashboard.not_active") %></p>
+          <p class="fp-dash-hint"><%= inactive.(source) %></p>
+        <% else %>
+          <% overall = color.(source.data["gesamt"]) %>
+          <p><span class="fp-dash-lamp" data-lamp="<%= overall %>"><%= t("flightplan.dashboard.lamp.#{overall}") %></span>
+            <% if source.stale? %><span class="fp-dash-stale"><%= t("flightplan.dashboard.stale", age: Flightplan::Dashboard.age_label(source.age)) %></span><% end %></p>
+          <ul>
+            <% Array(source.data["pruefungen"]).first(20).each do |check| %>
+              <% next unless check.is_a?(Hash) %>
+              <li><%= check["name"].to_s.truncate(40) %>
+                <span class="fp-dash-lamp" data-lamp="<%= color.(check["ampel"]) %>"><%= t("flightplan.dashboard.lamp.#{color.(check["ampel"])}") %></span></li>
+            <% end %>
+          </ul>
+        <% end %>
+      </article>
+
+      <article class="fp-dash-tile" data-tile="engine">
+        <h3><%= t("flightplan.dashboard.tiles.engine") %></h3>
+        <% source = snaps[:engine] %>
+        <% if source.inactive? %>
+          <p class="fp-dash-off"><%= t("flightplan.dashboard.not_active") %></p>
+          <p class="fp-dash-hint"><%= inactive.(source) %></p>
+        <% else %>
+          <% engine = source.data["engine"].is_a?(Hash) ? source.data["engine"] : {} %>
+          <% plugin = source.data["plugin"].is_a?(Hash) ? source.data["plugin"] : {} %>
+          <p><span class="fp-dash-lamp" data-lamp="<%= color.(source.data["gesamt"]) %>"><%= t("flightplan.dashboard.lamp.#{color.(source.data["gesamt"])}") %></span>
+            <% if source.stale? %><span class="fp-dash-stale"><%= t("flightplan.dashboard.stale", age: Flightplan::Dashboard.age_label(source.age)) %></span><% end %></p>
+          <ul>
+            <li><%= t("flightplan.dashboard.tiles.engine_version") %>: <%= engine["version"].to_s.truncate(40).presence || "–" %>
+              <span class="fp-dash-lamp" data-lamp="<%= color.(engine["ampel"]) %>"><%= t("flightplan.dashboard.lamp.#{color.(engine["ampel"])}") %></span></li>
+            <li><%= t("flightplan.dashboard.tiles.plugin_version") %>: <%= plugin["version"].to_s.truncate(40).presence || "–" %>
+              <span class="fp-dash-lamp" data-lamp="<%= color.(plugin["ampel"]) %>"><%= t("flightplan.dashboard.lamp.#{color.(plugin["ampel"])}") %></span></li>
+          </ul>
+        <% end %>
+      </article>
+
+      <article class="fp-dash-tile" data-tile="slots">
+        <h3><%= t("flightplan.dashboard.tiles.slots") %></h3>
+        <% source = snaps[:dispatch] %>
+        <% slots = source.data? && source.data["slots"].is_a?(Hash) ? source.data["slots"] : nil %>
+        <% if source.inactive? || slots.nil? %>
+          <p class="fp-dash-off"><%= t("flightplan.dashboard.not_active") %></p>
+          <p class="fp-dash-hint"><%= source.inactive? ? inactive.(source) : t("flightplan.dashboard.inactive.invalid") %></p>
+        <% else %>
+          <p>
+            <span class="fp-dash-num"><%= slots["belegt"].is_a?(Integer) ? slots["belegt"] : "?" %></span> /
+            <span class="fp-dash-num"><%= slots["maximum"].is_a?(Integer) ? slots["maximum"] : "?" %></span>
+            <%= t("flightplan.dashboard.tiles.slots_used") %>
+            <% if source.stale? %><span class="fp-dash-stale"><%= t("flightplan.dashboard.stale", age: Flightplan::Dashboard.age_label(source.age)) %></span><% end %>
+          </p>
+          <p class="fp-dash-hint"><%= t("flightplan.dashboard.tiles.queue", count: Array(source.data["queue"]).size) %></p>
+        <% end %>
+      </article>
+    </div>
+  </section>
+</div>

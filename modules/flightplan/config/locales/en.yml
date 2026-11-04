@@ -70,3 +70,49 @@ en:
       run_kinds:
         claim: Claim
         start: Start
+    dashboard:
+      menu: ADA Dashboard
+      title: ADA Dashboard
+      not_active: not active
+      stale: "stale (%{age})"
+      inactive:
+        missing: The source file is missing.
+        unreadable: The source file is not readable.
+        invalid: The source file is unusable.
+        not_file: The source is not a regular file.
+        too_large: The source file is too large.
+      lamp:
+        gruen: green
+        gelb: yellow
+        rot: red
+        unbekannt: unknown
+      reasons:
+        waiting: waiting for human
+        question: open question
+        start: start approval
+        stale: no change
+      attention:
+        title: Attention
+        hint: "Waiting for a human, open questions, start-approval candidates and in-progress items unchanged for more than %{days} days. Age counts from the last change, for questions from the question."
+        empty: Nothing is waiting for you.
+        project: Project
+        id: "#id"
+        subject: Title
+        status: Status
+        agent: Agent
+        age: Age
+      tiles:
+        title: Overview
+        open: open
+        blocked: blocked
+        in_progress: in progress
+        health: Operations
+        engine: Engine and plugin
+        engine_version: Engine
+        plugin_version: Plugin
+        slots: Agent slots
+        slots_used: used
+        queue: "%{count} queued"
+    approvals:
+      title: Approvals
+      empty: Approvals appear here once they are built.

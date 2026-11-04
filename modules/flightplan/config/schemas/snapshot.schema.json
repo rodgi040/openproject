@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "flightplan/snapshot.schema.json",
+  "title": "ADA-Schnappschuss des Status-Sammlers (Spec #1602, Anhang)",
+  "description": "Was DashboardSnapshots aus snapshot.json liest. Weitere Schlüssel sind erlaubt. Gültig 5 Minuten, danach veraltet. Enthält nie Secrets.",
+  "type": "object",
+  "required": ["erzeugt_am"],
+  "properties": {
+    "erzeugt_am": { "type": "string", "format": "date-time", "description": "UTC-Zeitstempel" },
+    "gesamt": { "enum": ["gruen", "gelb", "rot", "unbekannt"] },
+    "plugin": {
+      "type": "object",
+      "properties": {
+        "version": { "type": ["string", "null"] },
+        "sha": { "type": ["string", "null"] },
+        "ampel": { "enum": ["gruen", "gelb", "rot", "unbekannt"] },
+        "installierte_kopien": {
+          "type": "array",
+          "items": { "type": "object", "properties": { "pfad": { "type": "string" }, "version": { "type": "string" } } }
+        }
+      }
+    },
+    "engine": {
+      "type": "object",
+      "properties": {
+        "version": { "type": ["string", "null"] },
+        "git_sha": { "type": ["string", "null"] },
+        "drift": {},
+        "ampel": { "enum": ["gruen", "gelb", "rot", "unbekannt"] },
+        "laeufe_aktiv": { "type": "array", "items": { "$ref": "#/$defs/lauf" } },
+        "laeufe_letzte": { "type": "array", "items": { "$ref": "#/$defs/lauf" } }
+      }
+    },
+    "dienste": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "art", "ok", "geprueft_am"],
+        "properties": {
+          "name": { "type": "string" },
+          "art": { "enum": ["docker", "systemd", "http"] },
+          "ok": { "type": ["boolean", "null"] },
+          "geprueft_am": { "type": "string" }
+        }
+      }
+    },
+    "sessions": {
+      "type": "object",
+      "properties": {
+        "grenze": { "type": "integer" },
+        "dispatcher": { "type": "array" },
+        "herdr": { "type": "array" }
+      }
+    },
+    "langfuse": { "type": "object", "properties": { "erreichbar": { "type": ["boolean", "null"] } } }
+  },
+  "$defs": {
+    "lauf": {
+      "type": "object",
+      "properties": {
+        "projekt": { "type": "string" },
+        "ticket": { "type": "string" },
+        "op_wp": { "type": ["integer", "null"] },
+        "stufe": { "type": "string" },
+        "start": { "type": "string" },
+        "ende": { "type": ["string", "null"] },
+        "ergebnis": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

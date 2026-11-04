@@ -18,10 +18,18 @@ module OpenProject::Flightplan
            if: Proc.new { User.current.logged? }
 
       menu :global_menu,
+           :flightplan_dashboard,
+           { controller: "/flightplan/dashboard", action: :index },
+           caption: :"flightplan.dashboard.menu",
+           after: :flightplan,
+           icon: :graph,
+           if: Proc.new { User.current.admin? }
+
+      menu :global_menu,
            :flightplan_questions,
            { controller: "/flightplan/questions", action: :index },
            caption: ->(*) { Flightplan::Menu.caption(nil) },
-           after: :flightplan,
+           after: :flightplan_dashboard,
            icon: :comment,
            if: Proc.new { User.current.logged? }
 

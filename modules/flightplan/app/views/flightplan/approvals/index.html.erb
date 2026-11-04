@@ -1,0 +1,11 @@
+<% html_title(t("flightplan.approvals.title")) %>
+
+<%=
+  render(Primer::OpenProject::PageHeader.new) do |header|
+    header.with_title { t("flightplan.approvals.title") }
+    header.with_breadcrumbs(nil)
+  end
+%>
+
+<p id="fp-approvals-empty"><%= t("flightplan.approvals.empty") %></p>
+<p><%= link_to t("flightplan.dashboard.title"), flightplan_dashboard_path %></p>
