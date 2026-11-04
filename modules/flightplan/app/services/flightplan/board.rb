@@ -74,9 +74,35 @@ module Flightplan
     attr_reader :columns
 
     def projects
-      @projects ||= self.class.project_choices(@user).map do |choice|
-        choice.merge(selected: selected_projects.include?(choice[:identifier]))
+      @projects ||= begin
+        rows = self.class.project_choices(@user)
+        if (under = bereich_identifiers)
+          rows = rows.select { |choice| under.include?(choice[:identifier]) }
+        end
+        rows.map { |choice| choice.merge(selected: selected_projects.include?(choice[:identifier])) }
       end
+    end
+
+    def bereiche
+      @bereiche ||= begin
+        counts = self.class.project_choices(@user).index_by { |row| row[:identifier] }
+        grouped = {}
+        Project.visible(@user).order(:lft).each do |project|
+          roof = roof_for(project)
+          bucket = grouped[roof.identifier] ||= {
+            identifier: roof.identifier,
+            name: roof.name,
+            open_count: 0,
+            selected: roof.identifier == selected_bereich
+          }
+          bucket[:open_count] += counts.dig(project.identifier, :open_count).to_i
+        end
+        grouped.values.sort_by { |row| row[:name].downcase }
+      end
+    end
+
+    def selected_bereich
+      @selected_bereich ||= @raw["bereich"].to_s.strip.presence
     end
 
     def all_open_count
@@ -177,6 +203,7 @@ module Flightplan
     def query
       @query ||= {
         "projects" => selected_projects.join(",").presence,
+        "bereich" => selected_bereich,
         "q" => query_text.presence,
         "labels" => selected_labels.join(",").presence,
         "agents" => selected_agents.join(",").presence,
@@ -267,10 +294,38 @@ module Flightplan
     end
 
     def apply_projects(scope)
-      return scope if selected_projects.empty?
+      identifiers = scoped_identifiers
+      return scope if identifiers.nil?
 
-      ids = Project.visible(@user).where(identifier: selected_projects).select(:id)
+      ids = Project.visible(@user).where(identifier: identifiers).select(:id)
       scope.where(project_id: ids)
+    end
+
+    def scoped_identifiers
+      under = bereich_identifiers
+      chosen = selected_projects
+      if under
+        list = chosen.empty? ? under : (chosen & under)
+        return list
+      end
+      return nil if chosen.empty?
+
+      chosen
+    end
+
+    def bereich_identifiers
+      return @bereich_identifiers if defined?(@bereich_identifiers)
+
+      @bereich_identifiers = if selected_bereich.blank?
+        nil
+      else
+        root = Project.visible(@user).find_by(identifier: selected_bereich)
+        root && Project.visible(@user).where(id: root.self_and_descendants.select(:id)).pluck(:identifier)
+      end
+    end
+
+    def roof_for(project)
+      project.ancestors_from_root.find { |ancestor| ancestor.visible?(@user) } || project
     end
 
     def apply_search(scope)

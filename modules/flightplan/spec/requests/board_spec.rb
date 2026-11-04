@@ -93,7 +93,7 @@ RSpec.describe "Flightplan board", :skip_csrf, type: :rails_request do
       get "/flightplan/board"
 
       expect(response).to have_http_status(:ok), response.body
-      expect(response.body).to include('id="fp-chat-panel"')
+      expect(response.body).not_to include('id="fp-chat-panel"')
       expect(response.body).not_to include("data-fp-chat-frame")
       expect(response.body).not_to include("http://localhost:8092")
       directory = response.body[/id="fp-agent-directory">(.*?)<\/script>/m, 1]
@@ -163,18 +163,37 @@ RSpec.describe "Flightplan board", :skip_csrf, type: :rails_request do
       expect(response.body).not_to include('value="900"')
     end
 
-    it "renders the chat panel for an admin and allows the chat origin in CSP" do
+    it "leaves the chat origin in CSP and does not render the board panel" do
       login_as create(:admin)
       get "/flightplan/board"
 
       expect(response).to have_http_status(:ok), response.body
-      expect(response.body).to include('data-chat-origin="http://localhost:8092"')
-      expect(response.body).to include("data-fp-chat-frame")
-      expect(response.body).to include("fp-chat-offline")
+      expect(response.body).not_to include('id="fp-chat-panel"')
+      expect(response.body).not_to include("data-fp-chat-frame")
       header = response.headers["Content-Security-Policy"].to_s
       expect(header).to include("frame-src")
       expect(header).to include("child-src")
       expect(header).to include("http://localhost:8092")
+    end
+
+    it "filters packages by the top-level project" do
+      roof = create(:project, name: "Dach Filter", public: false, workspace_type: "portfolio")
+      inside = create(:project, name: "Dach Kind", parent: roof, public: false)
+      outside = create(:project, name: "Neben Filter", public: false)
+      role_filter = create(:project_role, permissions: %i[view_work_packages])
+      viewer = create(:user, member_with_roles: { roof => role_filter, inside => role_filter, outside => role_filter })
+      create(:work_package, project: inside, author: viewer, status: neu, subject: "Im Dach")
+      create(:work_package, project: outside, author: viewer, status: neu, subject: "Ausserhalb Dach")
+      login_as viewer
+
+      get "/flightplan/board", params: { bereich: roof.identifier }
+
+      expect(response).to have_http_status(:ok), response.body
+      expect(response.body).to include("data-bereich=\"#{roof.identifier}\"")
+      expect(response.body).to include("data-project=\"#{inside.identifier}\"")
+      expect(response.body).not_to include("data-project=\"#{outside.identifier}\"")
+      expect(response.body).to include("Im Dach")
+      expect(response.body).not_to include("Ausserhalb Dach")
     end
 
     it "redirects the menu target" do

@@ -10,6 +10,19 @@
 <div id="fp-board-alert" class="op-toast -error mb-2" hidden></div>
 
 <div class="fp-filters">
+  <nav class="fp-chips" aria-label="<%= t("flightplan.board.bereiche") %>">
+    <%= link_to flightplan_board_path(@board.params_for(bereich: nil, projects: nil)), class: "fp-chip #{'is-on' if @board.selected_bereich.blank?}", data: { bereich: "all", turbo: false } do %>
+      <%= t("flightplan.board.all") %>
+      <span><%= @board.bereiche.sum { |row| row[:open_count] } %></span>
+    <% end %>
+    <% @board.bereiche.each do |choice| %>
+      <%= link_to flightplan_board_path(@board.params_for(bereich: choice[:identifier], projects: nil)), class: "fp-chip #{'is-on' if choice[:selected]}", data: { bereich: choice[:identifier], open: choice[:open_count], turbo: false } do %>
+        <%= choice[:name] %>
+        <span><%= choice[:open_count] %></span>
+      <% end %>
+    <% end %>
+  </nav>
+
   <nav class="fp-chips" aria-label="<%= t("flightplan.board.projects") %>">
     <%= link_to flightplan_board_path(@board.params_for(projects: nil)), class: "fp-chip #{'is-on' if @board.selected_projects.empty?}", data: { project: "all", open: @board.all_open_count, turbo: false } do %>
       <%= t("flightplan.board.all") %>
@@ -26,6 +39,9 @@
   </nav>
 
   <%= form_with url: flightplan_board_path, method: :get, local: true, class: "fp-search", data: { turbo: false } do %>
+    <% if @board.selected_bereich.present? %>
+      <%= hidden_field_tag :bereich, @board.selected_bereich %>
+    <% end %>
     <% if @board.selected_projects.any? %>
       <%= hidden_field_tag :projects, @board.selected_projects.join(",") %>
     <% end %>
@@ -84,25 +100,6 @@
 </div>
 
 <div class="fp-board-layout">
-  <% if User.current.admin? %>
-    <aside id="fp-chat-panel"
-           class="fp-chat-panel"
-           aria-label="<%= t("flightplan.board.chat") %>"
-           aria-expanded="false"
-           data-chat-origin="http://localhost:8092"
-           data-questions-url="<%= flightplan_questions_path %>"
-           data-csrf="<%= form_authenticity_token %>">
-      <button type="button" class="fp-chat-tab" data-fp-chat-toggle><%= t("flightplan.board.chat") %></button>
-      <div class="fp-chat-body" data-fp-chat-body hidden>
-        <div class="fp-chat-handle" data-fp-chat-resize role="separator" aria-orientation="vertical" aria-label="<%= t("flightplan.board.chat_resize") %>"></div>
-        <p class="fp-chat-offline" data-fp-chat-offline hidden><%= t("flightplan.board.chat_offline") %></p>
-        <iframe class="fp-chat-frame" data-fp-chat-frame title="<%= t("flightplan.board.chat") %>" hidden></iframe>
-      </div>
-      <script type="application/json" id="fp-chat-questions"><%= json_escape(@chat_questions.to_json).html_safe %></script>
-    </aside>
-  <% else %>
-    <aside id="fp-chat-panel" class="fp-chat-panel" aria-label="<%= t("flightplan.board.chat") %>" aria-expanded="false" hidden></aside>
-  <% end %>
   <div id="fp-board"
        class="fp-board-scroll"
        data-move-url="<%= flightplan_board_move_path %>"
@@ -136,6 +133,7 @@
                 } do %>
               <div class="fp-card-line">
                 <%= link_to "##{card.id}", work_package_path(card.id), class: "fp-id" %>
+                <%= link_to t("flightplan.workplace.tab"), flightplan_workplace_path(card.id), class: "fp-badge", data: { turbo: false } %>
                 <span class="fp-chip"><%= card.project_name %></span>
                 <time datetime="<%= card.updated_at.iso8601 %>"><%= card.updated_at.strftime("%d.%m.%Y") %></time>
               </div>

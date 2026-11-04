@@ -1,0 +1,164 @@
+<% html_title(t("flightplan.workplace.tab")) %>
+
+<%=
+  render(Primer::OpenProject::PageHeader.new) do |header|
+    header.with_title { @place.subject }
+    header.with_breadcrumbs(nil)
+  end
+%>
+
+<nav class="fp-tabs" aria-label="<%= t("flightplan.workplace.tabs") %>">
+  <%= link_to t("flightplan.workplace.activity"), "#{work_package_path(@place.work_package)}/activity", data: { turbo: false } %>
+  <%= link_to t("flightplan.workplace.files"), "#{work_package_path(@place.work_package)}/files", data: { turbo: false } %>
+  <%= link_to t("flightplan.workplace.relations"), "#{work_package_path(@place.work_package)}/relations", data: { turbo: false } %>
+  <span class="is-on" aria-current="page"><%= t("flightplan.workplace.tab") %></span>
+</nav>
+
+<div id="fp-workplace"
+     class="fp-workplace"
+     data-chat-origin="<%= Flightplan::Workplace::CHAT_ORIGIN %>"
+     data-csrf="<%= form_authenticity_token %>">
+  <section class="fp-workplace-info" aria-label="<%= t("flightplan.workplace.info") %>">
+    <p>
+      <span class="fp-badge" data-fp-status="<%= @place.status %>"><%= @place.status %></span>
+      <span><%= @place.project_name %></span>
+    </p>
+
+    <h2><%= t("flightplan.workplace.timeline") %></h2>
+    <ol class="fp-timeline" data-fp-timeline>
+      <% @place.timeline.each do |step| %>
+        <li data-status="<%= step.status %>">
+          <time datetime="<%= step.at&.iso8601 %>"><%= step.at&.strftime("%d.%m.%Y %H:%M") %></time>
+          <strong><%= step.status %></strong>
+          <% if step.user %><span><%= step.user %></span><% end %>
+        </li>
+      <% end %>
+    </ol>
+
+    <h2><%= t("flightplan.workplace.tree") %></h2>
+    <ul class="fp-tree" data-fp-tree>
+      <% @place.tree.select { |node| node.role == "parent" }.each do |node| %>
+        <li data-role="parent" data-id="<%= node.id %>" data-status="<%= node.status %>">
+          <%= link_to node.subject, flightplan_workplace_path(node.id), data: { turbo: false } %>
+          <span class="fp-badge"><%= node.status %></span>
+        </li>
+      <% end %>
+      <% self_node = @place.tree.find { |node| node.role == "self" } %>
+      <li data-role="self" data-id="<%= self_node.id %>" data-status="<%= self_node.status %>">
+        <strong><%= self_node.subject %></strong>
+        <span class="fp-badge"><%= self_node.status %></span>
+        <% children = @place.tree.select { |node| node.role == "child" } %>
+        <% if children.any? %>
+          <ul>
+            <% children.each do |node| %>
+              <li data-role="child" data-id="<%= node.id %>" data-status="<%= node.status %>">
+                <%= link_to node.subject, flightplan_workplace_path(node.id), data: { turbo: false } %>
+                <span class="fp-badge"><%= node.status %></span>
+              </li>
+            <% end %>
+          </ul>
+        <% end %>
+      </li>
+    </ul>
+
+    <h2><%= t("flightplan.workplace.progress") %></h2>
+    <div class="fp-progress"
+         role="progressbar"
+         aria-valuemin="0"
+         aria-valuemax="<%= @place.progress.total %>"
+         aria-valuenow="<%= @place.progress.done %>"
+         aria-label="<%= t("flightplan.workplace.progress_label", done: @place.progress.done, total: @place.progress.total) %>"
+         data-fp-progress
+         data-done="<%= @place.progress.done %>"
+         data-total="<%= @place.progress.total %>">
+      <span style="width: <%= @place.progress.percent %>%"></span>
+    </div>
+    <p><%= t("flightplan.workplace.progress_label", done: @place.progress.done, total: @place.progress.total) %></p>
+
+    <h2><%= t("flightplan.workplace.runs") %></h2>
+    <% if @place.runs.empty? %>
+      <p data-fp-runs-empty><%= t("flightplan.workplace.runs_empty") %></p>
+    <% else %>
+      <ul data-fp-runs>
+        <% @place.runs.each do |run| %>
+          <li data-kind="<%= run.kind %>">
+            <time datetime="<%= run.at&.iso8601 %>"><%= run.at&.strftime("%d.%m.%Y %H:%M") %></time>
+            <span class="fp-badge"><%= t("flightplan.workplace.run_kinds.#{run.kind}") %></span>
+            <%= run.label %>
+            <% if run.user %><span><%= run.user %></span><% end %>
+          </li>
+        <% end %>
+      </ul>
+    <% end %>
+
+    <h2><%= t("flightplan.questions.labels") %></h2>
+    <p data-fp-labels><%= @place.labels.presence&.join(", ") || "–" %></p>
+
+    <h2><%= t("flightplan.workplace.agent") %></h2>
+    <p data-fp-agent>
+      <% if @place.agent %>
+        <%= @place.agent.name %>
+        <% if @place.agent.group %><span class="fp-badge"><%= @place.agent.group %></span><% end %>
+      <% else %>
+        –
+      <% end %>
+    </p>
+    <% if @place.involved.any? %>
+      <p data-fp-involved>
+        <%= @place.involved.map { |person| person.name }.join(", ") %>
+      </p>
+    <% end %>
+
+    <h2><%= t("flightplan.questions.description") %></h2>
+    <% if @place.description_full.length > Flightplan::Workplace::PREVIEW %>
+      <details data-fp-description>
+        <summary><%= @place.description %></summary>
+        <p><%= @place.description_full %></p>
+      </details>
+    <% else %>
+      <p data-fp-description><%= @place.description.presence || "–" %></p>
+    <% end %>
+
+    <h2><%= t("flightplan.workplace.questions") %></h2>
+    <% if @place.questions.empty? %>
+      <p>–</p>
+    <% else %>
+      <ul>
+        <% @place.questions.each do |question| %>
+          <li><%= link_to question.question, "/flightplan/questions#q-#{question.id}", data: { turbo: false } %></li>
+        <% end %>
+      </ul>
+    <% end %>
+
+    <h2><%= t("flightplan.questions.branch") %></h2>
+    <p data-fp-branch><%= @place.branch.presence || "–" %></p>
+    <h2><%= t("flightplan.questions.pull_request") %></h2>
+    <p data-fp-pr>
+      <% if @place.pull_request %>
+        <%= link_to @place.pull_request, @place.pull_request %>
+      <% else %>
+        –
+      <% end %>
+    </p>
+
+    <h2><%= t("flightplan.questions.comments") %></h2>
+    <% if @place.comments.empty? %>
+      <p>–</p>
+    <% else %>
+      <ul data-fp-comments>
+        <% @place.comments.each do |comment| %>
+          <li><strong><%= comment.author %></strong> <%= comment.text %></li>
+        <% end %>
+      </ul>
+    <% end %>
+  </section>
+
+  <section class="fp-workplace-chat" aria-label="<%= t("flightplan.board.chat") %>">
+    <iframe class="fp-workplace-frame"
+            data-fp-workplace-frame
+            title="<%= t("flightplan.board.chat") %>"
+            src="<%= Flightplan::Workplace::CHAT_ORIGIN %>/chat/embed/<%= @place.work_package.id %>"></iframe>
+  </section>
+  <script type="application/json" id="fp-workplace-context"><%= json_escape(@place.context.to_json).html_safe %></script>
+  <script type="application/json" id="fp-workplace-questions"><%= json_escape(@place.chat_questions.to_json).html_safe %></script>
+</div>

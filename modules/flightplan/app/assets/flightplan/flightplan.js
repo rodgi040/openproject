@@ -308,3 +308,92 @@
 
   setOpen(window.localStorage.getItem(openKey) === "1");
 })();
+
+(function () {
+  var root = document.getElementById("fp-workplace");
+  if (!root) return;
+  var origin = "http://localhost:8092";
+  var frame = root.querySelector("[data-fp-workplace-frame]");
+  var contextNode = document.getElementById("fp-workplace-context");
+  var questionsNode = document.getElementById("fp-workplace-questions");
+  var wp = {};
+  var questions = [];
+  try {
+    wp = JSON.parse(contextNode ? contextNode.textContent : "{}");
+  } catch (error) {
+    wp = {};
+  }
+  try {
+    questions = JSON.parse(questionsNode ? questionsNode.textContent : "[]");
+  } catch (error) {
+    questions = [];
+  }
+
+  function post(message) {
+    if (!frame || !frame.contentWindow) return;
+    frame.contentWindow.postMessage(message, origin);
+  }
+
+  function sendState() {
+    post({ type: "fp:context", wp: wp });
+    post({ type: "fp:questions", items: questions });
+  }
+
+  if (frame) {
+    frame.addEventListener("load", sendState);
+    // The iframe's listener starts with its module, after the load event. Repeat until it answers.
+    [800, 2000, 5000, 10000].forEach(function (delay) {
+      window.setTimeout(sendState, delay);
+    });
+  }
+
+  window.addEventListener("message", function (event) {
+    if (event.origin !== origin) return;
+    if (!frame || !frame.contentWindow || event.source !== frame.contentWindow) return;
+    var data = event.data || {};
+    if (data.type === "fp:hello") {
+      sendState();
+      return;
+    }
+    if (data.type !== "fp:answer" || !data.id) return;
+    var bodyParams = new URLSearchParams();
+    if (data.option) bodyParams.set("option", data.option);
+    if (data.text) bodyParams.set("text", data.text);
+    fetch("/flightplan/questions/" + encodeURIComponent(data.id) + "/answer", {
+      method: "POST",
+      headers: {
+        "X-CSRF-Token": root.dataset.csrf,
+        "Accept": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: bodyParams.toString()
+    }).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (payload) {
+        if (!response.ok || !payload.ok) return;
+        questions = payload.items || [];
+        sendState();
+      });
+    }).catch(function () {});
+  });
+})();
+
+(function () {
+  var match = window.location.pathname.match(/\/work_packages\/(\d+)(?:\/|$)/);
+  if (!match || window.location.pathname.indexOf("/flightplan/") !== -1) return;
+  var href = "/flightplan/work_packages/" + match[1];
+  function insert() {
+    if (document.querySelector("[data-fp-workplace-tab]")) return;
+    var list = document.querySelector("[role='tablist']");
+    if (!list) return;
+    var link = document.createElement("a");
+    link.href = href;
+    link.textContent = "Arbeitsplatz";
+    link.setAttribute("data-fp-workplace-tab", "1");
+    link.setAttribute("role", "tab");
+    list.appendChild(link);
+  }
+  if (document.body) {
+    insert();
+    new MutationObserver(insert).observe(document.body, { childList: true, subtree: true });
+  }
+})();

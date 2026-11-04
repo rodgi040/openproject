@@ -23,6 +23,7 @@ de:
     board:
       title: Flightplan
       projects: Projekte
+      bereiche: Bereiche
       all: Alle
       search: Suche
       search_placeholder: "#id, Titel, Label"
@@ -51,3 +52,21 @@ de:
         review: Review
         done: Fertig
         rejected: Abgelehnt
+    workplace:
+      tab: Arbeitsplatz
+      tabs: Ticket
+      activity: Aktivität
+      files: Dateien
+      relations: Beziehungen
+      info: Ticket
+      timeline: Status
+      tree: Abhängigkeiten
+      progress: Unteraufgaben
+      progress_label: "%{done} von %{total} fertig"
+      runs: Agent-Läufe
+      runs_empty: Keine Claims oder Starts.
+      agent: Agent
+      questions: Offene Rückfragen
+      run_kinds:
+        claim: Claim
+        start: Start
