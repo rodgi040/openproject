@@ -54,6 +54,23 @@ RSpec.describe Flightplan::DashboardSnapshots do
     expect(read(:dispatch).state).to eq(:stale)
   end
 
+  it "treats a timestamp in the future as inactive" do
+    write("snapshot.json", { "erzeugt_am" => (now + 2 * 3600).utc.iso8601, "gesamt" => "gruen" })
+    expect(read(:engine)).to be_inactive
+    expect(read(:engine).reason).to eq(:future)
+    write("snapshot.json", { "erzeugt_am" => (now + 30).utc.iso8601, "gesamt" => "gruen" })
+    expect(read(:engine).state).to eq(:ok)
+  end
+
+  it "does not raise on absurd heartbeat values" do
+    [1e30, -1e30, 10**40, -(10**40)].each do |epoch|
+      write("status.json", { "gesamt" => "gruen", "heartbeat" => { "epoch" => epoch } })
+      expect { read(:health) }.not_to raise_error
+    end
+    write("status.json", { "gesamt" => "gruen", "heartbeat" => { "epoch" => 10**40 } })
+    expect(read(:health)).to be_inactive
+  end
+
   it "treats broken JSON and non-objects as inactive without raising" do
     write("status.json", "{ kaputt")
     expect(read(:health)).to be_inactive

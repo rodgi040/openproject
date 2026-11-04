@@ -386,3 +386,44 @@
   background: #ffebe9;
   color: #a40e26;
 }
+
+.fp-dash-age {
+  white-space: nowrap;
+}
+
+.fp-dash-approve {
+  white-space: nowrap;
+}
+
+.fp-dash-approve .fp-approve-one,
+.fp-dash-bulk .fp-approve-bulk {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.15rem 0.6rem;
+  margin-left: 0.4rem;
+  border: 1px solid var(--borderColor-default, #d1d9e0);
+  border-radius: 6px;
+  background: var(--bgColor-default, #fff);
+  cursor: pointer;
+}
+
+.fp-dash-reason[data-reason="start_failed"] {
+  color: var(--fgColor-danger, #cf222e);
+  font-weight: 600;
+}
+
+.fp-dash-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.fp-dash-stats dt {
+  color: var(--fgColor-muted, #59636e);
+  font-size: 0.8rem;
+}
+
+.fp-dash-stats dd {
+  margin: 0;
+}

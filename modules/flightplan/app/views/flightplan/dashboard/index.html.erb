@@ -29,6 +29,15 @@
     </nav>
 
     <% groups = @dashboard.groups %>
+    <% any_approvable = groups.any? { |group| group[:rows].any? { |row| row[:approvable] } } %>
+    <%= form_with url: flightplan_approvals_create_path, method: :post, id: "fp-approve-form", local: true, data: { turbo: false } do %>
+    <%= hidden_field_tag :bereich, @dashboard.selected_bereich, id: nil %>
+    <% if any_approvable %>
+      <p class="fp-dash-bulk">
+        <button type="submit" class="fp-approve-bulk" id="fp-approve-bulk"><%= t("flightplan.approvals.bulk") %></button>
+        <span class="fp-dash-hint"><%= t("flightplan.approvals.hint") %></span>
+      </p>
+    <% end %>
     <% if groups.empty? || groups.all? { |group| group[:rows].empty? } %>
       <p id="fp-dash-empty"><%= t("flightplan.dashboard.attention.empty") %></p>
     <% end %>
@@ -44,6 +53,7 @@
             <th scope="col"><%= t("flightplan.dashboard.attention.status") %></th>
             <th scope="col"><%= t("flightplan.dashboard.attention.agent") %></th>
             <th scope="col"><%= t("flightplan.dashboard.attention.age") %></th>
+            <% if any_approvable %><th scope="col"><%= t("flightplan.dashboard.attention.approval") %></th><% end %>
           </tr>
         </thead>
         <tbody>
@@ -59,11 +69,21 @@
                 <% end %>
               </td>
               <td><%= row[:agent].presence || "–" %></td>
-              <td><time datetime="<%= row[:since].iso8601 %>"><%= Flightplan::Dashboard.age_label(row[:age_seconds]) %></time></td>
+              <td class="fp-dash-age"><time datetime="<%= row[:since].iso8601 %>"><%= Flightplan::Dashboard.age_label(row[:age_seconds]) %></time></td>
+              <% if any_approvable %>
+                <td class="fp-dash-approve">
+                  <% if row[:approvable] %>
+                    <%= check_box_tag "ids[]", row[:id], false, id: "fp-ap-#{row[:id]}", class: "fp-approve-check", "aria-label": t("flightplan.approvals.select") %>
+                    <%= hidden_field_tag "lock_versions[#{row[:id]}]", row[:lock_version], id: nil %>
+                    <button type="submit" name="single" value="<%= row[:id] %>" class="fp-approve-one"><%= t("flightplan.approvals.button") %></button>
+                  <% end %>
+                </td>
+              <% end %>
             </tr>
           <% end %>
         </tbody>
       </table>
+    <% end %>
     <% end %>
   </section>
 
@@ -72,13 +92,22 @@
 
     <div class="fp-dash-grid">
       <% @dashboard.tiles.each do |tile| %>
+        <% key = tile[:key] %>
+        <% area = ->(text, **opts) { key ? link_to(text, flightplan_board_path(bereich: key), data: { turbo: false }, **opts) : text } %>
         <article class="fp-dash-tile" data-tile="bereich" data-bereich-tile="<%= tile[:label] %>">
-          <h3><%= tile[:label] %></h3>
-          <p>
-            <span class="fp-dash-num"><%= tile[:open] %></span> <%= t("flightplan.dashboard.tiles.open") %>
-            · <span class="fp-dash-num"><%= tile[:blocked] %></span> <%= t("flightplan.dashboard.tiles.blocked") %>
-            · <span class="fp-dash-num"><%= tile[:in_progress] %></span> <%= t("flightplan.dashboard.tiles.in_progress") %>
-          </p>
+          <h3><%= area.(tile[:label], class: "fp-dash-tile-link") %></h3>
+          <dl class="fp-dash-stats">
+            <div data-stat="projects"><dt><%= t("flightplan.dashboard.tiles.projects") %></dt>
+              <dd><span class="fp-dash-num"><%= area.(tile[:project_count]) %></span></dd></div>
+            <div data-stat="open"><dt><%= t("flightplan.dashboard.tiles.open") %></dt>
+              <dd><span class="fp-dash-num"><%= area.(tile[:open]) %></span></dd></div>
+            <div data-stat="blocked"><dt><%= t("flightplan.dashboard.tiles.blocked") %></dt>
+              <dd><span class="fp-dash-num"><%= key ? link_to(tile[:blocked], flightplan_dashboard_path(bereich: key, anchor: "fp-dash-attention-title"), data: { turbo: false }) : tile[:blocked] %></span></dd></div>
+            <div data-stat="questions"><dt><%= t("flightplan.dashboard.tiles.questions") %></dt>
+              <dd><span class="fp-dash-num"><%= tile[:project_identifiers].any? ? link_to(tile[:questions], flightplan_questions_path(projects: tile[:project_identifiers].join(",")), data: { turbo: false }) : tile[:questions] %></span></dd></div>
+            <div data-stat="agents"><dt><%= t("flightplan.dashboard.tiles.agents") %></dt>
+              <dd><% if tile[:agents].nil? %><span class="fp-dash-off"><%= t("flightplan.dashboard.not_active") %></span><% else %><span class="fp-dash-num"><%= link_to(tile[:agents], "#fp-tile-agents") %></span><% end %></dd></div>
+          </dl>
           <ul>
             <% tile[:projects].each do |project| %>
               <li>
@@ -130,7 +159,7 @@
         <% end %>
       </article>
 
-      <article class="fp-dash-tile" data-tile="slots">
+      <article class="fp-dash-tile" id="fp-tile-agents" data-tile="agents">
         <h3><%= t("flightplan.dashboard.tiles.slots") %></h3>
         <% source = snaps[:dispatch] %>
         <% slots = source.data? && source.data["slots"].is_a?(Hash) ? source.data["slots"] : nil %>
@@ -145,6 +174,18 @@
             <% if source.stale? %><span class="fp-dash-stale"><%= t("flightplan.dashboard.stale", age: Flightplan::Dashboard.age_label(source.age)) %></span><% end %>
           </p>
           <p class="fp-dash-hint"><%= t("flightplan.dashboard.tiles.queue", count: Array(source.data["queue"]).size) %></p>
+          <% running = @dashboard.running || [] %>
+          <h4><%= t("flightplan.dashboard.tiles.running_title") %></h4>
+          <% if running.empty? %>
+            <p class="fp-dash-hint" data-running="none"><%= t("flightplan.dashboard.tiles.running_none") %></p>
+          <% else %>
+            <ul data-running="list">
+              <% running.each do |entry| %>
+                <li><%= link_to "##{entry[:id]} #{entry[:subject].to_s.truncate(60)}", flightplan_workplace_path(entry[:id]), data: { turbo: false } %>
+                  <span><%= [entry[:harness].presence, entry[:model]].compact.join(" ") %></span></li>
+              <% end %>
+            </ul>
+          <% end %>
         <% end %>
       </article>
     </div>

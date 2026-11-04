@@ -14,6 +14,7 @@ module Flightplan
     DEFAULT_DIR = "/var/lib/ada-export"
     DIR_ENV = "FP_EXPORT_DIR"
     MAX_BYTES = 1_048_576
+    FUTURE_TOLERANCE = 60
     COLORS = %w[gruen gelb rot unbekannt].freeze
 
     # Gültigkeit in Sekunden: Schnappschuss 5 min (Spec), Gesundheitsstatus 15 min (Dead-Man-Grenze),
@@ -59,6 +60,8 @@ module Flightplan
       return inactive(key, data) unless data.is_a?(Hash)
 
       stamp = timestamp(key, data) || mtime
+      # Ein Zeitstempel in der Zukunft (mehr als eine Minute Uhrenabweichung) ist unbrauchbar.
+      return inactive(key, :future) if stamp && stamp > @now + FUTURE_TOLERANCE
       age = stamp ? [@now - stamp, 0].max : nil
       state = age.nil? || age > spec[:ttl] ? :stale : :ok
       Source.new(key:, state:, data:, age:, reason: nil)
@@ -102,7 +105,7 @@ module Flightplan
         raw = data["erzeugt_am"] || data["zeitpunkt"]
         Time.iso8601(raw.to_s).in_time_zone if raw.is_a?(String)
       end
-    rescue ArgumentError
+    rescue ArgumentError, RangeError, FloatDomainError
       nil
     end
   end

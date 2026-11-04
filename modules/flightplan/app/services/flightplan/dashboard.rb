@@ -17,13 +17,22 @@ module Flightplan
       "nuova-ai-solutions" => "Nuova AI Solutions",
       "nuovagen" => "NuovaGen"
     }.freeze
-    REASONS = %i[waiting question start stale].freeze
+    # Gründe, die in der Statusspalte als eigener Hinweis erscheinen. "Wartet auf Mensch" und "Startfreigabe"
+    # sagt schon der Status selbst.
+    REASONS = %i[question stale start_failed].freeze
+    FAILED_START_DAYS = 14
+    # Marker des Pollers (op_poller: <!-- fp-op-alarm:start:N -->) und Rückfall-Kommentar von ada-dispatch.
+    FAILED_START_NOTES = ["%fp-op-alarm:start:%", "%ada-dispatch: Start fehlgeschlagen%"].freeze
+    # Freigabe: von diesen Status auf Startfreigabe, nur bei Master "op".
+    APPROVABLE_STATUSES = ["Geplant", STATUS_WAITING].freeze
+    MASTER_FIELD = "Master"
+    STATUS_IDS_CACHE_SECONDS = 300
 
     def self.load(user:, params:, now: Time.current, snapshots: nil)
       new(user, params, now, snapshots).load
     end
 
-    attr_reader :tiles, :snapshots
+    attr_reader :tiles, :snapshots, :running
 
     def initialize(user, params, now, snapshots)
       @user = user
@@ -36,6 +45,7 @@ module Flightplan
       data = Rails.cache.fetch(["flightplan-dashboard", @user.id], expires_in: CACHE_SECONDS.seconds) { compute }
       @rows = data[:rows]
       @tiles = data[:tiles]
+      @running = data[:running]
       self
     end
 
@@ -68,6 +78,26 @@ module Flightplan
       end
     end
 
+    # Die Status-IDs werden einmal per Name aufgelöst und kurz gecacht (Status werden selten umbenannt).
+    def self.status_ids
+      Rails.cache.fetch("flightplan-dashboard-status-ids", expires_in: STATUS_IDS_CACHE_SECONDS.seconds) do
+        names = [STATUS_WAITING, STATUS_START, STATUS_PROGRESS] + APPROVABLE_STATUSES
+        Status.where(name: names.uniq).pluck(:name, :id).to_h
+      end
+    end
+
+    # Für dashboard-check.sh (H2): offene Arbeitspakete je Status und die Kachelzahlen derselben Seite.
+    def self.check_report(user:, now: Time.current)
+      dashboard = load(user:, params: {}, now:)
+      statuses = WorkPackage.visible(user).joins(:status).where(statuses: { is_closed: false })
+        .group("statuses.name").count
+      {
+        statuses:,
+        total_open: statuses.values.sum,
+        tiles: dashboard.tiles.to_h { |tile| [tile[:label], { open: tile[:open], blocked: tile[:blocked] }] }
+      }
+    end
+
     def self.age_label(seconds)
       seconds = seconds.to_i
       return "#{seconds / 86_400} T" if seconds >= 86_400
@@ -80,7 +110,8 @@ module Flightplan
 
     def compute
       bereiche = project_bereiche
-      { rows: attention_rows(bereiche), tiles: build_tiles(bereiche) }
+      running = running_agents
+      { rows: attention_rows(bereiche), tiles: build_tiles(bereiche, running), running: }
     end
 
     # project_id => { identifier:, name:, bereich: }
@@ -104,49 +135,110 @@ module Flightplan
     def attention_rows(bereiche)
       oldest_questions = Flightplan::Question.open.group(:work_package_id).minimum(:created_at)
       cut = @now - STALE_DAYS.days
+      ids = self.class.status_ids
       found = WorkPackage.visible(@user).joins(:status)
         .where(statuses: { is_closed: false })
         .where(
-          "statuses.name IN (:names) OR (statuses.name = :progress AND work_packages.updated_at < :cut) " \
+          "work_packages.status_id IN (:names) OR (work_packages.status_id = :progress AND work_packages.updated_at < :cut) " \
           "OR work_packages.id IN (:question_ids)",
-          names: [STATUS_WAITING, STATUS_START], progress: STATUS_PROGRESS, cut:, question_ids: oldest_questions.keys
+          names: ids.values_at(STATUS_WAITING, STATUS_START).compact, progress: ids[STATUS_PROGRESS], cut:,
+          question_ids: oldest_questions.keys
         )
-        .pluck("work_packages.id", "work_packages.subject", "work_packages.project_id", "statuses.name",
-               "work_packages.assigned_to_id", "work_packages.updated_at")
-      agents = assignee_names(found.filter_map { |row| row[4] })
-      found.filter_map do |id, subject, project_id, status, assignee_id, updated_at|
+        .pluck("work_packages.id", "work_packages.subject", "work_packages.project_id", "work_packages.status_id",
+               "work_packages.assigned_to_id", "work_packages.updated_at", "work_packages.lock_version")
+      wp_ids = found.map(&:first)
+      context = {
+        agents: assignee_names(found.filter_map { |row| row[4] }),
+        status_names: Status.where(id: found.map { |row| row[3] }.uniq).pluck(:id, :name).to_h,
+        changed: status_changed_at(wp_ids),
+        failed: failed_starts(found.select { |row| row[3] == ids[STATUS_WAITING] }.map(&:first)),
+        masters: masters(wp_ids),
+        ids:
+      }
+      found.filter_map do |id, subject, project_id, status_id, assignee_id, updated_at, lock_version|
         project = projects_by_id[project_id]
         next unless project
 
-        row_for(id, subject, project, bereiche[project_id], status, agents[assignee_id], updated_at,
-                oldest_questions[id], cut)
+        row_for(
+          { id:, subject:, status_id:, assignee_id:, updated_at:, lock_version: },
+          project, bereiche[project_id], oldest_questions[id], cut, context
+        )
       end
     end
 
-    def row_for(id, subject, project, bereich, status, agent, updated_at, question_at, cut)
+    def row_for(wp, project, bereich, question_at, cut, context)
+      status = context[:status_names][wp[:status_id]]
+      since_status = context[:changed][wp[:id]] || wp[:updated_at]
       reasons = []
       stamps = []
-      if status == STATUS_WAITING
-        reasons << :waiting
-        stamps << updated_at
-      end
       if question_at
         reasons << :question
         stamps << question_at
       end
-      if status == STATUS_START
-        reasons << :start
-        stamps << updated_at
+      if wp[:status_id] == context[:ids][STATUS_WAITING] || wp[:status_id] == context[:ids][STATUS_START]
+        stamps << since_status
       end
-      if status == STATUS_PROGRESS && updated_at < cut
+      if wp[:status_id] == context[:ids][STATUS_PROGRESS] && wp[:updated_at] < cut
         reasons << :stale
-        stamps << updated_at
+        stamps << since_status
       end
-      since = stamps.min
+      if context[:failed].key?(wp[:id])
+        reasons << :start_failed
+        stamps << since_status
+      end
+      since = stamps.min || since_status
+      approvable = APPROVABLE_STATUSES.include?(status) && context[:masters][wp[:id]] == "op"
       {
-        id:, subject:, project: project[:name], project_identifier: project[:identifier], bereich:, status:,
-        agent:, reasons:, since:, age_seconds: [(@now - since).to_i, 0].max
+        id: wp[:id], subject: wp[:subject], project: project[:name], project_identifier: project[:identifier],
+        bereich:, status:, agent: context[:agents][wp[:assignee_id]], reasons:, since:,
+        age_seconds: [(@now - since).to_i, 0].max, lock_version: wp[:lock_version], approvable:
       }
+    end
+
+    # Zeitpunkt des letzten Statuswechsels je Arbeitspaket aus den Journalen, eine einzige Abfrage für alle IDs
+    # (kein N+1). Zählt als Wechsel: das erste Journal und jedes Journal, dessen status_id vom Vorgänger abweicht.
+    def status_changed_at(wp_ids)
+      return {} if wp_ids.empty?
+
+      sql = ActiveRecord::Base.sanitize_sql_array([<<~SQL.squish, wp_ids])
+        SELECT journable_id, MAX(created_at) AS changed_at
+        FROM (
+          SELECT journals.journable_id, journals.created_at, work_package_journals.status_id,
+                 LAG(work_package_journals.status_id) OVER (
+                   PARTITION BY journals.journable_id ORDER BY journals.version ASC, journals.id ASC
+                 ) AS previous_status_id
+          FROM journals
+          INNER JOIN work_package_journals
+            ON work_package_journals.id = journals.data_id
+           AND journals.data_type = 'Journal::WorkPackageJournal'
+          WHERE journals.journable_type = 'WorkPackage' AND journals.journable_id IN (?)
+        ) status_history
+        WHERE previous_status_id IS NULL OR previous_status_id <> status_id
+        GROUP BY journable_id
+      SQL
+      ActiveRecord::Base.connection.select_all(sql).cast_values.to_h do |id, changed_at|
+        [id, changed_at.is_a?(String) ? Time.zone.parse(changed_at) : changed_at.in_time_zone]
+      end
+    end
+
+    # "Start fehlgeschlagen" (H4): Alarm- oder Rückfall-Kommentar der letzten 14 Tage in den Journal-Notizen.
+    def failed_starts(wp_ids)
+      return {} if wp_ids.empty?
+
+      Journal.where(journable_type: "WorkPackage", journable_id: wp_ids)
+        .where("journals.created_at >= ?", @now - FAILED_START_DAYS.days)
+        .where("journals.notes LIKE ? OR journals.notes LIKE ?", *FAILED_START_NOTES)
+        .group(:journable_id).maximum(:created_at)
+    end
+
+    # Custom field "Master" (github | op) je Arbeitspaket, eine Abfrage.
+    def masters(wp_ids)
+      field = WorkPackageCustomField.find_by(name: MASTER_FIELD)
+      return {} if field.nil? || wp_ids.empty?
+
+      options = field.custom_options.pluck(:id, :value).to_h { |id, value| [id.to_s, value] }
+      CustomValue.where(customized_type: "WorkPackage", custom_field_id: field.id, customized_id: wp_ids)
+        .pluck(:customized_id, :value).to_h { |id, value| [id, options[value.to_s]] }
     end
 
     def assignee_names(ids)
@@ -155,26 +247,71 @@ module Flightplan
       end
     end
 
-    def build_tiles(bereiche)
+    # Laufende Agents (H5): Starts aus dispatch.json (letzte_starts), deren Ticket jetzt "In Arbeit" ist.
+    # nil, wenn dispatch.json fehlt oder unbrauchbar ist ("nicht aktiv").
+    def running_agents
+      source = @snapshots[:dispatch]
+      return nil if source.inactive?
+
+      starts = Array(source.data["letzte_starts"]).filter_map do |entry|
+        op = entry.is_a?(Hash) ? Integer(entry["op"], exception: false) : nil
+        [op, entry] if op&.positive?
+      end.to_h
+      progress_id = self.class.status_ids[STATUS_PROGRESS]
+      return [] if starts.empty? || progress_id.nil?
+
+      WorkPackage.visible(@user).where(id: starts.keys.first(200), status_id: progress_id)
+        .pluck(:id, :subject, :project_id).filter_map do |id, subject, project_id|
+        project = projects_by_id[project_id]
+        next unless project
+
+        entry = starts[id]
+        { id:, subject:, project_id:, project: project[:name], harness: entry["harness"].to_s.truncate(40),
+          model: entry["modell"].to_s.truncate(60).presence, started: parse_time(entry["gestartet"]) }
+      end
+    end
+
+    def parse_time(value)
+      Time.iso8601(value.to_s).in_time_zone
+    rescue ArgumentError, TypeError
+      nil
+    end
+
+    def build_tiles(bereiche, running)
       scope = WorkPackage.visible(@user).joins(:status).where(statuses: { is_closed: false })
+      ids = self.class.status_ids
       open = scope.group(:project_id).count
-      blocked = scope.where(statuses: { name: STATUS_WAITING }).group(:project_id).count
-      progress = scope.where(statuses: { name: STATUS_PROGRESS }).group(:project_id).count
+      blocked = scope.where(work_packages: { status_id: ids[STATUS_WAITING] }).group(:project_id).count
+      progress = scope.where(work_packages: { status_id: ids[STATUS_PROGRESS] }).group(:project_id).count
+      questions = open_questions_by_project(scope)
       (BEREICHE.values + [NO_BEREICH]).filter_map do |label|
-        ids = projects_by_id.keys.select { |id| bereiche[id] == label }
-        next if ids.empty?
+        project_ids = projects_by_id.keys.select { |id| bereiche[id] == label }
+        next if project_ids.empty?
 
         {
-          label:,
-          open: ids.sum { |id| open[id].to_i },
-          blocked: ids.sum { |id| blocked[id].to_i },
-          in_progress: ids.sum { |id| progress[id].to_i },
-          projects: ids.map do |id|
+          label:, key: BEREICHE.key(label),
+          project_count: project_ids.size,
+          open: project_ids.sum { |id| open[id].to_i },
+          blocked: project_ids.sum { |id| blocked[id].to_i },
+          in_progress: project_ids.sum { |id| progress[id].to_i },
+          questions: project_ids.sum { |id| questions[id].to_i },
+          agents: running && running.count { |entry| project_ids.include?(entry[:project_id]) },
+          projects: project_ids.map do |id|
             { identifier: projects_by_id[id][:identifier], name: projects_by_id[id][:name],
               open: open[id].to_i, blocked: blocked[id].to_i }
-          end.sort_by { |project| [-project[:open], project[:name].downcase] }
+          end.sort_by { |project| [-project[:open], project[:name].downcase] },
+          project_identifiers: project_ids.map { |id| projects_by_id[id][:identifier] }
         }
       end
+    end
+
+    # Offene Rückfragen je Projekt (nur zu offenen, sichtbaren Arbeitspaketen).
+    def open_questions_by_project(scope)
+      per_wp = Flightplan::Question.open.group(:work_package_id).count
+      return {} if per_wp.empty?
+
+      scope.where(id: per_wp.keys).pluck("work_packages.id", "work_packages.project_id")
+        .each_with_object(Hash.new(0)) { |(id, project_id), sum| sum[project_id] += per_wp[id] }
     end
   end
 end

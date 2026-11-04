@@ -81,19 +81,19 @@ de:
         invalid: Die Quelldatei ist unbrauchbar.
         not_file: Die Quelle ist keine reguläre Datei.
         too_large: Die Quelldatei ist zu groß.
+        future: Zeit in der Zukunft.
       lamp:
         gruen: grün
         gelb: gelb
         rot: rot
         unbekannt: unbekannt
       reasons:
-        waiting: wartet auf Mensch
         question: offene Rückfrage
-        start: Startfreigabe
         stale: ohne Änderung
+        start_failed: Start fehlgeschlagen
       attention:
         title: Aufmerksamkeit
-        hint: "Wartet auf Mensch, offene Rückfragen, Startfreigabe-Kandidaten und „In Arbeit“ ohne Änderung seit mehr als %{days} Tagen. Das Alter zählt ab der letzten Änderung, bei Rückfragen ab der Frage."
+        hint: "Wartet auf Mensch, offene Rückfragen, Startfreigabe-Kandidaten und „In Arbeit“ ohne Änderung seit mehr als %{days} Tagen. Das Alter zählt ab dem letzten Statuswechsel, bei Rückfragen ab der Frage."
         empty: Nichts wartet auf dich.
         project: Projekt
         id: "#id"
@@ -101,18 +101,40 @@ de:
         status: Status
         agent: Agent
         age: Alter
+        approval: Freigabe
       tiles:
         title: Übersicht
         open: offen
+        projects: Projekte
+        questions: offene Rückfragen
+        agents: laufende Agents
         blocked: blockiert
         in_progress: in Arbeit
         health: Betrieb
         engine: Engine und Plugin
         engine_version: Engine
         plugin_version: Plugin
-        slots: Agent-Slots
+        slots: Laufende Agents
+        running_none: Kein laufender Agent.
+        running_title: Läuft jetzt
         slots_used: belegt
         queue: "%{count} in der Warteschlange"
     approvals:
       title: Freigaben
-      empty: Hier erscheinen die Freigaben, sobald sie gebaut sind.
+      empty: Freigaben laufen über die Aufmerksamkeitstabelle im ADA Dashboard.
+      button: Starten freigeben
+      bulk: Ausgewählte zum Start freigeben
+      select: Zeile auswählen
+      none: Es wurde nichts ausgewählt.
+      done: "%{ok} freigegeben, %{rejected} abgelehnt."
+      done_with_reasons: "%{ok} freigegeben, %{rejected} abgelehnt: %{reasons}"
+      hint: "Setzt nur den Status auf „Startfreigabe“ als der angemeldete Mensch. Den Start übernimmt später ada-dispatch."
+      reasons:
+        invalid_id: Ungültige Nummer
+        not_found: nicht gefunden
+        wrong_status: Status ist nicht „Geplant“ oder „Wartet auf Mensch“
+        wrong_master: Master ist nicht „op“
+        conflict: Konflikt, das Paket wurde zwischenzeitlich geändert
+        lock_missing: lockVersion fehlt
+        no_status: Status „Startfreigabe“ fehlt
+        too_many: zu viele Einträge

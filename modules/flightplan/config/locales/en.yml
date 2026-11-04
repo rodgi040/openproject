@@ -81,19 +81,19 @@ en:
         invalid: The source file is unusable.
         not_file: The source is not a regular file.
         too_large: The source file is too large.
+        future: Time in the future.
       lamp:
         gruen: green
         gelb: yellow
         rot: red
         unbekannt: unknown
       reasons:
-        waiting: waiting for human
         question: open question
-        start: start approval
         stale: no change
+        start_failed: start failed
       attention:
         title: Attention
-        hint: "Waiting for a human, open questions, start-approval candidates and in-progress items unchanged for more than %{days} days. Age counts from the last change, for questions from the question."
+        hint: "Waiting for a human, open questions, start-approval candidates and in-progress items unchanged for more than %{days} days. Age counts from the last status change, for questions from the question."
         empty: Nothing is waiting for you.
         project: Project
         id: "#id"
@@ -101,18 +101,40 @@ en:
         status: Status
         agent: Agent
         age: Age
+        approval: Approval
       tiles:
         title: Overview
         open: open
+        projects: projects
+        questions: open questions
+        agents: running agents
         blocked: blocked
         in_progress: in progress
         health: Operations
         engine: Engine and plugin
         engine_version: Engine
         plugin_version: Plugin
-        slots: Agent slots
+        slots: Running agents
+        running_none: No running agent.
+        running_title: Running now
         slots_used: used
         queue: "%{count} queued"
     approvals:
       title: Approvals
-      empty: Approvals appear here once they are built.
+      empty: Approvals run through the attention table in the ADA dashboard.
+      button: Approve start
+      bulk: Approve selected for start
+      select: Select row
+      none: Nothing was selected.
+      done: "%{ok} approved, %{rejected} rejected."
+      done_with_reasons: "%{ok} approved, %{rejected} rejected: %{reasons}"
+      hint: "Only sets the status to Startfreigabe as the signed-in human. ada-dispatch starts the work later."
+      reasons:
+        invalid_id: Invalid number
+        not_found: not found
+        wrong_status: Status is not Geplant or Wartet auf Mensch
+        wrong_master: Master is not op
+        conflict: Conflict, the package was changed in the meantime
+        lock_missing: lockVersion missing
+        no_status: Status Startfreigabe is missing
+        too_many: too many entries
