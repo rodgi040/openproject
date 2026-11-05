@@ -465,3 +465,22 @@
     white-space: nowrap;
   }
 }
+
+/* #1618: Enterprise advertising that is rendered by compiled Angular or the icon font. Presentation only. */
+.upsell-colored,
+.upsell-colored-text,
+.upsell-colored-background,
+.op-enterprise-banner,
+.widget-box--upsell-block,
+.controller-homescreen .widget-box.upsell,
+a[href*="ee-upsell"],
+a[href*="op_edition=community-edition"],
+a[href*="/enterprise_plans"] {
+  display: none !important;
+}
+
+/* Admin menu entry "Enterprise": keep the entry (token management), drop the gem glyph. */
+a[href*="/admin/enterprise"] svg,
+a[href*="/admin/enterprise"] .op-icon {
+  display: none !important;
+}

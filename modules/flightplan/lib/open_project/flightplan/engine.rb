@@ -56,6 +56,8 @@ module OpenProject::Flightplan
     config.to_prepare do
       OpenProject::Flightplan::Hooks
       OpenProject::Flightplan::CspHook
+      require "open_project/flightplan/no_upsell"
+      OpenProject::Flightplan::NoUpsell.apply!
     end
   end
 end
