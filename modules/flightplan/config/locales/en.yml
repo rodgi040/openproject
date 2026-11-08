@@ -81,6 +81,13 @@ en:
       run_kinds:
         claim: Claim
         start: Start
+    home:
+      main: ADA Dashboard
+      chat: "Chat (T3 Code, Gandalf)"
+      chat_admin_only: "The chat (T3 Code) is available to administrators only. Ask about a ticket in a comment on the ticket."
+      dashboard_admin_only: "Only administrators see the ADA Dashboard."
+      dashboard_links_html: "Your work is on the %{board} and under %{questions}."
+      board: board
     dashboard:
       menu: ADA Dashboard
       title: ADA Dashboard

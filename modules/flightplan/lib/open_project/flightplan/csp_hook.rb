@@ -11,10 +11,16 @@ module OpenProject
       def application_controller_before_action(context)
         controller = context[:controller]
         directives = { frame_src: [CHAT_ORIGIN], child_src: [CHAT_ORIGIN] }
-        # Der Arbeitsplatz und das Board prüfen den Chat vor dem Laden per fetch (no-cors, nur Erreichbarkeit).
-        # connect-src nur auf den Controllern des Moduls, nicht auf jeder OpenProject-Seite.
-        directives[:connect_src] = [CHAT_ORIGIN] if controller.class.name.to_s.start_with?("Flightplan::")
+        # Arbeitsplatz, Board und Startseite (OP#1671) prüfen den Chat vor dem Laden per fetch (no-cors, nur Erreichbarkeit).
+        # connect-src nur auf den Controllern des Moduls und der Startseite, nicht auf jeder OpenProject-Seite.
+        directives[:connect_src] = [CHAT_ORIGIN] if chat_page?(controller)
         controller.append_content_security_policy_directives(**directives)
+      end
+
+      private
+
+      def chat_page?(controller)
+        controller.class.name.to_s.start_with?("Flightplan::") || controller.is_a?(::HomescreenController)
       end
     end
   end

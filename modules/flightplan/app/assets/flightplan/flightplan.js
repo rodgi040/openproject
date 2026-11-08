@@ -309,11 +309,9 @@
   setOpen(window.localStorage.getItem(openKey) === "1");
 })();
 
-(function () {
-  var root = document.getElementById("fp-workplace");
-  if (!root) return;
+// Chat iframe of the workplace (#fp-workplace) and of the home screen (#fp-home-chat, OP#1671).
+function fpMountChat(root, frame) {
   var origin = "http://localhost:8092";
-  var frame = root.querySelector("[data-fp-workplace-frame]");
   var contextNode = document.getElementById("fp-workplace-context");
   var questionsNode = document.getElementById("fp-workplace-questions");
   var wp = {};
@@ -335,7 +333,7 @@
   }
 
   function sendState() {
-    post({ type: "fp:context", wp: wp });
+    if (wp && wp.id) post({ type: "fp:context", wp: wp });
     post({ type: "fp:questions", items: questions });
   }
 
@@ -419,6 +417,13 @@
       });
     }).catch(function () {});
   });
+}
+
+(function () {
+  var workplace = document.getElementById("fp-workplace");
+  if (workplace) fpMountChat(workplace, workplace.querySelector("[data-fp-workplace-frame]"));
+  var home = document.getElementById("fp-home-chat");
+  if (home) fpMountChat(home, home.querySelector("[data-fp-home-frame]"));
 })();
 
 (function () {
