@@ -479,8 +479,8 @@ a[href*="/enterprise_plans"] {
   display: none !important;
 }
 
-/* Admin menu entry "Enterprise": keep the entry (token management), drop the gem glyph. */
-a[href*="/admin/enterprise"] svg,
-a[href*="/admin/enterprise"] .op-icon {
+/* #1629: Admin entry "Enterprise": hide only the gem glyph of the menu entry and the admin overview tile, never icons of /admin/enterprise_tokens/* buttons. */
+a.op-menu--item-action[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addons,
+a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addons {
   display: none !important;
 }
