@@ -316,6 +316,66 @@
   }
 }
 
+/* OP#1671: Home screen (/) and /flightplan/dashboard. Main column on the left (dashboard, later widgets), chat column on
+   the right. Same height rule as the workplace (OP#1669): the grid fills exactly the rest of #content-body, both columns
+   scroll on their own, the chat is never taller than the visible area (--fp-home-fit). The column switch follows the
+   width of #content-body (container query), because OpenProject folds its side menu away on narrow windows. */
+#content-body:has(> #fp-home) {
+  display: flex;
+  flex-direction: column;
+  container-type: inline-size;
+}
+
+.fp-home {
+  --fp-home-fit: calc(100dvh - var(--header-height, 55px) - 1.5rem);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, min(36%, 36rem));
+  grid-template-rows: minmax(0, 1fr);
+  gap: 1rem;
+  flex: 1 1 0;
+  min-height: min(24rem, var(--fp-home-fit));
+}
+
+.fp-home-main {
+  overflow: auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.fp-home-chat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.fp-home-frame {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: 8px;
+}
+
+@container (max-width: 50rem) {
+  /* One column: dashboard first, then the chat, its frame exactly as high as the visible area. */
+  .fp-home {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+
+  .fp-home-main {
+    overflow: visible;
+  }
+
+  .fp-home-frame {
+    flex: 0 0 auto;
+    height: var(--fp-home-fit);
+  }
+}
+
 /* ADA Dashboard (S4). Keine externen Hosts, keine Schriften von außen. */
 .fp-dash h2 {
   margin: 1rem 0 0.5rem;

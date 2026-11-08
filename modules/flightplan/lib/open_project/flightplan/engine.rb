@@ -56,6 +56,7 @@ module OpenProject::Flightplan
     config.to_prepare do
       OpenProject::Flightplan::Hooks
       OpenProject::Flightplan::CspHook
+      ::HomescreenController.include OpenProject::Flightplan::Startseite
       require "open_project/flightplan/no_upsell"
       OpenProject::Flightplan::NoUpsell.apply!
     end
