@@ -25,7 +25,7 @@ module Flightplan
         flash[:alert] = t("flightplan.approvals.none")
       else
         flash_result(Flightplan::Approvals.call(user: User.current, entries:))
-        Rails.cache.delete(["flightplan-dashboard", User.current.id])
+        Rails.cache.delete(Flightplan::Dashboard.cache_key(User.current.id))
       end
       redirect_to flightplan_dashboard_path(bereich: bereich_param)
     end

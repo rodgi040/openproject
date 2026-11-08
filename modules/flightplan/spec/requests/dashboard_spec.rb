@@ -84,7 +84,7 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
     it "links every row to the Arbeitsplatz page and shows the age" do
       get "/flightplan/dashboard"
       expect(response.body).to include(%(href="/flightplan/work_packages/#{waiting_wp.id}"))
-      row = response.body[/<tr data-wp="#{stale_wp.id}">.*?<\/tr>/m]
+      row = response.body[/<tr data-wp="#{stale_wp.id}"[^>]*>.*?<\/tr>/m]
       expect(row).to include("9 T")
     end
 
@@ -156,7 +156,7 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
       backdate(waiting_wp, 5.days.ago)
       waiting_wp.update_columns(updated_at: 1.minute.ago)
       get "/flightplan/dashboard"
-      row = response.body[/<tr data-wp="#{waiting_wp.id}">.*?<\/tr>/m]
+      row = response.body[/<tr data-wp="#{waiting_wp.id}"[^>]*>.*?<\/tr>/m]
       expect(row).to include("5 T")
     end
 
@@ -176,7 +176,7 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
       let(:old) { create(:work_package, project: ada, author: admin, status: waiting, subject: "Alt Zehn") }
 
       def row(id)
-        response.body[/data-bereich-table="ADA MAIN">.*?<\/table>/m][/<tr data-wp="#{id}">.*?<\/tr>/m]
+        response.body[/data-bereich-table="ADA MAIN">.*?<\/table>/m][/<tr data-wp="#{id}"[^>]*>.*?<\/tr>/m]
       end
 
       def note(work_package, text, user: dispatcher, at: nil)
@@ -227,7 +227,7 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
         expect(response).to have_http_status(:ok)
         expect(response.body).to include("data-fp-missing-status=\"Startfreigabe\"", "Status „Startfreigabe“ nicht gefunden")
         expect(Rails.cache.read(Flightplan::Dashboard::STATUS_IDS_CACHE_KEY)).to be_nil
-        expect(Rails.cache.read(["flightplan-dashboard", admin.id])).to be_nil
+        expect(Rails.cache.read(Flightplan::Dashboard.cache_key(admin.id))).to be_nil
         expect(Flightplan::Dashboard.check_report(user: admin)[:missing_statuses]).to eq(["Startfreigabe"])
         startfreigabe.update!(name: "Startfreigabe")
         get "/flightplan/dashboard"
@@ -292,8 +292,9 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
 
     it "has no external hosts in the page" do
       get "/flightplan/dashboard"
-      body = response.body[/<div id="fp-dashboard".*?<\/section>\s*<\/div>/m]
-      expect(body).not_to match(%r{(src|href)="https?://})
+      body = Nokogiri::HTML(response.body).at_css("#fp-dashboard")
+      expect(body).to be_present
+      expect(body.to_html).not_to match(%r{(src|href)="https?://})
     end
 
     it "shows a future timestamp as not active" do

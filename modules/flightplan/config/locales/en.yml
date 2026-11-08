@@ -88,6 +88,20 @@ en:
       dashboard_admin_only: "Only administrators see the ADA Dashboard."
       dashboard_links_html: "Your work is on the %{board} and under %{questions}."
       board: board
+    widgets:
+      search: Search …
+      search_in: "Search %{title}"
+      tools: "Search and filter: %{title}"
+      scope: Project or area
+      scope_all: All projects
+      bereiche: Areas
+      status: Status
+      status_all: All statuses
+      labels: Labels
+      reset: Reset
+      none: Nothing matches this search.
+      count: Entries (visible of total)
+      open_blocked: open / blocked
     dashboard:
       menu: ADA Dashboard
       title: ADA Dashboard

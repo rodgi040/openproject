@@ -446,3 +446,147 @@ function fpMountChat(root, frame) {
     new MutationObserver(insert).observe(document.body, { childList: true, subtree: true });
   }
 })();
+
+// OP#1672: Suche und Filter je Dashboard-Widget, im Browser über die gerenderten Einträge ([data-fp-item]).
+function fpParseList(value) {
+  try {
+    var list = JSON.parse(value || "[]");
+    return Array.isArray(list) ? list.map(String) : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function fpNormalize(text) {
+  return String(text || "").toLocaleLowerCase("de").replace(/\s+/g, " ").trim();
+}
+
+// Label-Filter: je Fieldset eine Gruppe. Innerhalb einer Gruppe genügt ein Label (ODER), über Gruppen hinweg müssen alle
+// Gruppen mit Auswahl passen (UND). Heute gibt es eine Gruppe; Kategorien aus OP#1670 brauchen hier keine Änderung.
+function fpLabelFilter(box) {
+  if (!box) {
+    return { active: function () { return false; }, match: function () { return true; }, reset: function () {} };
+  }
+  var groups = Array.prototype.slice.call(box.querySelectorAll("[data-fp-label-group]"));
+  var counter = box.querySelector("[data-fp-labels-count]");
+
+  function selected() {
+    return groups.map(function (group) {
+      return Array.prototype.slice.call(group.querySelectorAll("input[type='checkbox']:checked")).map(function (input) {
+        return input.value;
+      });
+    }).filter(function (names) { return names.length; });
+  }
+
+  return {
+    active: function () {
+      var count = selected().reduce(function (sum, names) { return sum + names.length; }, 0);
+      if (counter) counter.textContent = count ? "(" + count + ")" : "";
+      return count > 0;
+    },
+    match: function (labels) {
+      return selected().every(function (names) {
+        return names.some(function (name) { return labels.indexOf(name) !== -1; });
+      });
+    },
+    reset: function () {
+      box.querySelectorAll("input[type='checkbox']").forEach(function (input) { input.checked = false; });
+      box.open = false;
+    }
+  };
+}
+
+function fpWidgetFilters(widget) {
+  var tools = widget.querySelector("[data-fp-widget-tools]");
+  if (!tools) return;
+  var items = Array.prototype.slice.call(widget.querySelectorAll("[data-fp-item]"));
+  var groups = Array.prototype.slice.call(widget.querySelectorAll("[data-fp-group]"));
+  var text = tools.querySelector("[data-fp-filter='text']");
+  var scope = tools.querySelector("[data-fp-filter='scope']");
+  var status = tools.querySelector("[data-fp-filter='status']");
+  var labels = fpLabelFilter(tools.querySelector("[data-fp-filter='labels']"));
+  var reset = tools.querySelector("[data-fp-filter-reset]");
+  var count = widget.querySelector("[data-fp-widget-count]");
+  var none = widget.querySelector("[data-fp-widget-none]");
+
+  function matchScope(item, value) {
+    var split = value.indexOf(":");
+    var kind = value.slice(0, split);
+    var key = value.slice(split + 1);
+    if (kind === "bereich") return item.getAttribute("data-fp-area") === key;
+    return fpParseList(item.getAttribute("data-fp-projects")).indexOf(key) !== -1;
+  }
+
+  function apply() {
+    var words = fpNormalize(text && text.value).split(" ").filter(Boolean);
+    var scopeValue = scope ? scope.value : "";
+    var statusValue = status ? status.value : "";
+    var labelsOn = labels.active();
+    var active = words.length > 0 || !!scopeValue || !!statusValue || labelsOn;
+    var shown = 0;
+    items.forEach(function (item) {
+      var itemLabels = fpParseList(item.getAttribute("data-fp-labels"));
+      var ok = true;
+      if (words.length) {
+        var haystack = fpNormalize(item.textContent + " " + itemLabels.join(" "));
+        ok = words.every(function (word) { return haystack.indexOf(word) !== -1; });
+      }
+      if (ok && scopeValue) ok = matchScope(item, scopeValue);
+      if (ok && statusValue) ok = fpParseList(item.getAttribute("data-fp-statuses")).indexOf(statusValue) !== -1;
+      if (ok && labelsOn) ok = labels.match(itemLabels);
+      item.hidden = !ok;
+      // Ausgeblendete Zeilen dürfen nicht unbemerkt mit der Sammelfreigabe abgeschickt werden.
+      item.querySelectorAll("input[type='checkbox']").forEach(function (input) { input.disabled = !ok; });
+      if (ok) shown += 1;
+    });
+    groups.forEach(function (group) {
+      var all = group.querySelectorAll("[data-fp-item]").length;
+      var visible = group.querySelectorAll("[data-fp-item]:not([hidden])").length;
+      group.hidden = active && all > 0 && visible === 0;
+      var badge = group.querySelector("[data-fp-group-count]");
+      if (badge) badge.textContent = active ? visible + " / " + all : String(all);
+    });
+    if (count) count.textContent = active ? shown + " / " + items.length : String(items.length);
+    if (none) none.hidden = !(active && shown === 0);
+    if (reset) reset.hidden = !active;
+    widget.classList.toggle("is-filtered", active);
+  }
+
+  tools.addEventListener("input", apply);
+  tools.addEventListener("change", apply);
+  tools.addEventListener("submit", function (event) { event.preventDefault(); });
+  if (text) {
+    text.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") event.preventDefault();
+    });
+  }
+  if (reset) {
+    reset.addEventListener("click", function () {
+      if (text) text.value = "";
+      if (scope) scope.value = "";
+      if (status) status.value = "";
+      labels.reset();
+      apply();
+      if (text) text.focus();
+    });
+  }
+  var labelBox = tools.querySelector("[data-fp-filter='labels']");
+  if (labelBox) {
+    document.addEventListener("click", function (event) {
+      if (labelBox.open && !labelBox.contains(event.target)) labelBox.open = false;
+    });
+    // Das Aufklappfeld klappt nach links, wenn es rechts aus der scrollenden Hauptspalte ragen würde.
+    labelBox.addEventListener("toggle", function () {
+      labelBox.classList.remove("is-flipped");
+      if (!labelBox.open) return;
+      var pop = labelBox.querySelector(".fp-widget-labels-pop");
+      var frame = widget.closest(".fp-home-main") || document.documentElement;
+      if (pop && pop.getBoundingClientRect().right > frame.getBoundingClientRect().right) labelBox.classList.add("is-flipped");
+    });
+  }
+  apply();
+}
+
+(function () {
+  document.querySelectorAll("[data-fp-widget]").forEach(fpWidgetFilters);
+})();
