@@ -16,7 +16,7 @@
           <div data-stat="blocked"><dt><%= t("flightplan.dashboard.tiles.blocked") %></dt>
             <dd><span class="fp-dash-num"><%= key ? link_to(tile[:blocked], dash_path.(bereich: key, anchor: "fp-dash-attention-title"), data: { turbo: false }) : tile[:blocked] %></span></dd></div>
           <div data-stat="questions"><dt><%= t("flightplan.dashboard.tiles.questions") %></dt>
-            <dd><span class="fp-dash-num"><%= tile[:project_identifiers].any? ? link_to(tile[:questions], flightplan_questions_path(projects: tile[:project_identifiers].join(",")), data: { turbo: false }) : tile[:questions] %></span></dd></div>
+            <dd><span class="fp-dash-num"><%= tile[:project_identifiers].any? ? link_to(tile[:questions], dash_path.(Flightplan::QuestionsWidget::PARAM => "bereich:#{tile[:label]}"), data: { turbo: false }) : tile[:questions] %></span></dd></div>
           <div data-stat="agents"><dt><%= t("flightplan.dashboard.tiles.agents") %></dt>
             <dd><% if tile[:agents].nil? %><span class="fp-dash-off"><%= t("flightplan.dashboard.not_active") %></span><% else %><span class="fp-dash-num"><%= link_to(tile[:agents], "#fp-tile-agents") %></span><% end %></dd></div>
         </dl>

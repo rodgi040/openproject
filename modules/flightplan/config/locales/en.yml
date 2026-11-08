@@ -20,6 +20,16 @@ en:
       submit: Answer
       answered: Answered.
       answer_by: Answer by %{user}
+      widget:
+        title: Questions
+        hint: "Open questions from the agents, oldest first. An option sends the answer at once, together with the free text."
+        details: Context
+        free_text_optional: Free text (optional)
+        free_text_for: "Answer to: %{question}"
+        send_text: Send free text only
+        answered: Answered.
+        sending: Sending …
+        failed: Answer failed.
     board:
       title: Flightplan
       projects: Projects
@@ -86,7 +96,7 @@ en:
       chat: "Chat (T3 Code, Gandalf)"
       chat_admin_only: "The chat (T3 Code) is available to administrators only. Ask about a ticket in a comment on the ticket."
       dashboard_admin_only: "Only administrators see the ADA Dashboard."
-      dashboard_links_html: "Your work is on the %{board} and under %{questions}."
+      dashboard_links_html: "Your work is on the %{board}. Open questions are listed below."
       board: board
     widgets:
       search: Search …

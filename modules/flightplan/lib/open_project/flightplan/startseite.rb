@@ -21,6 +21,10 @@ module OpenProject
           @dashboard = ::Flightplan::Dashboard.load(user: User.current, params: params.permit(:bereich))
           @approval_state = ::Flightplan::Approvals.availability(User.current)
         end
+        @questions_widget = ::Flightplan::QuestionsWidget.load(
+          user: User.current, params: params.permit(::Flightplan::QuestionsWidget::PARAM),
+          tree: @dashboard&.project_tree, status_order: @dashboard&.status_order
+        )
         render "flightplan/dashboard/index"
       end
     end

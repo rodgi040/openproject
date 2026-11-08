@@ -147,7 +147,7 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
       expect(tile).to include('href="/flightplan/dashboard?bereich=ada-main#fp-dash-attention-title"')
       other = response.body[/data-bereich-tile="Nuova AI Solutions">.*?<\/article>/m]
       expect(other).to match(%r{data-stat="questions".*?>1</a>}m)
-      expect(other).to include("/flightplan/questions?projects=")
+      expect(other).to include("/flightplan/dashboard?rueckfragen=bereich%3ANuova+AI+Solutions")
       expect(response.body[/data-bereich-tile="Ohne Bereich">.*?<\/article>/m]).not_to include("bereich=")
     end
 

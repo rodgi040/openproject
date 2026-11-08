@@ -1,5 +1,7 @@
-<%# OP#1672: Hülle eines Insel-Widgets. Locals: key, title, filters (Flightplan::WidgetFilters), optional title_id. %>
+<%# OP#1672: Hülle eines Insel-Widgets. Locals: key, title, filters (Flightplan::WidgetFilters), optional title_id und
+    selected_scope (vorausgewählter Wert im Projekt-/Bereichsfilter, OP#1673). %>
 <% title_id = local_assigns[:title_id] || "fp-widget-#{key}-title" %>
+<% selected_scope = local_assigns[:selected_scope] %>
 <% wide = Flightplan::WidgetFilters::WIDE.include?(key) %>
 <section class="fp-widget<%= " fp-widget--wide" if wide %>" id="fp-widget-<%= key %>" data-fp-widget="<%= key %>" aria-labelledby="<%= title_id %>">
   <header class="fp-widget-head">
@@ -15,7 +17,7 @@
         <% scopes.each do |group| %>
           <optgroup label="<%= group[:title] %>">
             <% group[:options].each do |option| %>
-              <option value="<%= option[:value] %>"><%= ("\u00A0\u00A0" * option[:depth]) + option[:label] %></option>
+              <%= tag.option(("\u00A0\u00A0" * option[:depth]) + option[:label], value: option[:value], selected: option[:value] == selected_scope) %>
             <% end %>
           </optgroup>
         <% end %>

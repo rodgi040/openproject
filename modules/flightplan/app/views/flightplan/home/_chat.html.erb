@@ -4,6 +4,9 @@
          data-chat-origin="<%= Flightplan::Workplace::CHAT_ORIGIN %>"
          data-csrf="<%= form_authenticity_token %>">
   <% if User.current.admin? %>
+    <% if @questions_widget %>
+      <script type="application/json" data-fp-chat-questions><%= json_escape(@questions_widget.chat_items.to_json).html_safe %></script>
+    <% end %>
     <div class="fp-chat-offline" data-fp-chat-offline role="alert" hidden>
       <p><%= t("flightplan.workplace.chat_unreachable") %></p>
       <button type="button" data-fp-chat-reload><%= t("flightplan.workplace.chat_reload") %></button>

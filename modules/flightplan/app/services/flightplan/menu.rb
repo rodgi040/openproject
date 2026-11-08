@@ -4,15 +4,6 @@ module Flightplan
   module Menu
     module_function
 
-    def caption(project)
-      scope = Question.open.joins(:work_package).merge(WorkPackage.visible(User.current))
-      scope = scope.where(work_packages: { project_id: project.id }) if project
-      count = scope.count
-      count.positive? ? "Rückfragen #{count}" : "Rückfragen"
-    rescue StandardError
-      "Rückfragen"
-    end
-
     def agent_directory
       rows = []
       {
@@ -40,7 +31,7 @@ module Flightplan
         .map do |question|
           {
             work_package_id: question.work_package_id,
-            href: "/flightplan/questions#q-#{question.id}"
+            href: "/#q-#{question.id}"
           }
         end
     rescue StandardError

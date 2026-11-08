@@ -24,22 +24,6 @@ module OpenProject::Flightplan
            after: :flightplan,
            icon: :graph,
            if: Proc.new { User.current.admin? }
-
-      menu :global_menu,
-           :flightplan_questions,
-           { controller: "/flightplan/questions", action: :index },
-           caption: ->(*) { Flightplan::Menu.caption(nil) },
-           after: :flightplan_dashboard,
-           icon: :comment,
-           if: Proc.new { User.current.logged? }
-
-      menu :project_menu,
-           :flightplan_questions,
-           { controller: "/flightplan/questions", action: :index },
-           caption: ->(project) { Flightplan::Menu.caption(project) },
-           after: :work_packages,
-           icon: :comment,
-           if: Proc.new { |_project| User.current.logged? }
     end
 
     add_api_endpoint "API::V3::Root" do

@@ -141,6 +141,15 @@ module Flightplan
       }
     end
 
+    # OP#1673: für das Rückfragen-Widget, das auch Nicht-Admins sehen und das nicht im Cache liegt.
+    def self.project_tree(user)
+      new(user, {}, Time.current, {}).send(:project_tree_with_bereich)
+    end
+
+    def self.work_package_labels(user, wp_ids)
+      new(user, {}, Time.current, {}).send(:work_package_labels, wp_ids)
+    end
+
     def self.age_label(seconds)
       seconds = seconds.to_i
       return "#{seconds / 86_400} T" if seconds >= 86_400
@@ -156,8 +165,12 @@ module Flightplan
       running = running_agents(bereiche)
       { rows: attention_rows(bereiche), tiles: build_tiles(bereiche, running), running:,
         missing_statuses: self.class.missing_statuses,
-        project_tree: tree_order.map { |entry| entry.merge(bereich: bereiche[entry[:id]]) },
+        project_tree: project_tree_with_bereich(bereiche),
         status_order: Status.order(:position).pluck(:name) }
+    end
+
+    def project_tree_with_bereich(bereiche = project_bereiche)
+      tree_order.map { |entry| entry.merge(bereich: bereiche[entry[:id]]) }
     end
 
     # project_id => { identifier:, name:, parent_id: }

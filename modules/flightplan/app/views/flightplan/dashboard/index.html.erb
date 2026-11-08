@@ -15,9 +15,15 @@
       <div class="fp-dash-hint" data-fp-dashboard-admin-only>
         <p><%= t("flightplan.home.dashboard_admin_only") %></p>
         <p><%= t("flightplan.home.dashboard_links_html",
-                 board: link_to(t("flightplan.home.board"), flightplan_board_path, data: { turbo: false }),
-                 questions: link_to(t("flightplan.questions.menu"), flightplan_questions_path, data: { turbo: false })) %></p>
+                 board: link_to(t("flightplan.home.board"), flightplan_board_path, data: { turbo: false })) %></p>
       </div>
+      <% if @questions_widget %>
+        <div class="fp-dash" id="fp-questions-only">
+          <div class="fp-widgets" data-fp-widgets>
+            <%= render "flightplan/dashboard/widgets/questions" %>
+          </div>
+        </div>
+      <% end %>
     <% end %>
   </section>
   <%= render "flightplan/home/chat" %>

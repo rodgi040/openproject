@@ -150,9 +150,15 @@ RSpec.describe "Flightplan board", :skip_csrf, type: :rails_request do
       get "/flightplan/board?done=all&rejected=1"
       expect(response.body).to include("Alt fertig", "Abgelehnt Paket")
 
+      # OP#1673: Die Rückfragen stehen im Widget der Startseite; die alte Seite leitet mit Vorauswahl dorthin.
+      get "/flightplan/board?projects=#{project.identifier}"
+      expect(response.body).to include("href=\"/?rueckfragen=project%3A#{project.identifier}\"")
       get "/flightplan/questions?projects=#{project.identifier}"
-      expect(response.body).to include("Frage auf Factory")
-      expect(response.body).not_to include("Frage auf Ada")
+      expect(response).to redirect_to("/?rueckfragen=project%3A#{project.identifier}")
+      get "/flightplan/questions.json?projects=#{project.identifier}"
+      texts = JSON.parse(response.body)["items"].map { |entry| entry["question"] }
+      expect(texts).to include("Frage auf Factory")
+      expect(texts).not_to include("Frage auf Ada")
     end
 
     it "caps a column limit at 500" do

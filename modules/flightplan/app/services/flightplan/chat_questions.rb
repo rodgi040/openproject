@@ -20,9 +20,9 @@ module Flightplan
         questions.map { |question| item(question) }
       end
 
-      def item(question)
+      def item(question, context: nil)
         work_package = question.work_package
-        context = flightplan_card_context(question)
+        context ||= flightplan_card_context(question)
         {
           id: question.id,
           question: question.question,

@@ -1,32 +1,23 @@
 # frozen_string_literal: true
 
 module Flightplan
+  # OP#1673: Die Rückfragen stehen im Widget „Rückfragen“ der Startseite. Die frühere Seite leitet dorthin um (mit
+  # Vorauswahl des Projekts); ihre JSON-Liste und die Antwort-Route bleiben.
   class QuestionsController < ApplicationController
     before_action :require_login
     no_authorization_required! :index, :answer
 
-    layout "global"
-
-    current_menu_item [:index, :answer] do
-      :flightplan_questions
-    end
-
     def index
       @project = find_project
-      @selected_projects = params[:projects].to_s.split(",").map(&:strip).reject(&:blank?)
-      @questions = question_scope.to_a
       if request.format.json?
-        render json: { items: Flightplan::ChatQuestions.items_from(@questions) }
+        render json: { items: Flightplan::ChatQuestions.items_from(question_scope.to_a) }
         return
       end
 
-      @project_choices = Flightplan::Board.project_choices(User.current)
-      @projects = Project.visible(User.current).order(:name)
-      @authors = User.where(id: question_scope.unscope(:order).distinct.pluck(:author_id)).order(:login)
+      redirect_to root_path(Flightplan::QuestionsWidget::PARAM => redirect_scope)
     end
 
     def answer
-      @project = find_project
       question = visible_question(params[:id])
       Flightplan::Questions::Answer.call(
         user: User.current,
@@ -39,15 +30,15 @@ module Flightplan
         return
       end
 
-      nxt = question_scope.open.oldest_first.first
-      redirect_to inbox_path(anchor: (nxt ? "q-#{nxt.id}" : nil)), notice: t("flightplan.questions.answered")
+      nxt = question_scope.first
+      redirect_to return_path(nxt ? "q-#{nxt.id}" : "fp-widget-questions"), notice: t("flightplan.questions.answered")
     rescue Flightplan::Error => error
       if request.format.json?
         render json: { ok: false, error: error.message }, status: :unprocessable_entity
         return
       end
 
-      redirect_to inbox_path(anchor: "q-#{params[:id]}"), alert: error.message
+      redirect_to return_path("q-#{params[:id]}"), alert: error.message
     end
 
     private
@@ -63,18 +54,25 @@ module Flightplan
       project
     end
 
+    def selected_identifiers
+      params[:projects].to_s.split(",").map(&:strip).compact_blank
+    end
+
+    def redirect_scope
+      Flightplan::QuestionsWidget.scope_for(project: @project, identifiers: selected_identifiers)
+    end
+
     def question_scope
       scope = Flightplan::Question
         .includes(:answered_by, author: :groups, work_package: %i[project status])
         .joins(:work_package)
         .merge(WorkPackage.visible(User.current))
         .oldest_first
-      scope = scope.open unless params[:all] == "1"
+      scope = scope.open unless params[:all] == "1" && request.format.json?
       if @project
         scope = scope.where(work_packages: { project_id: @project.id })
-      elsif params[:projects].present?
-        identifiers = params[:projects].to_s.split(",").map(&:strip).reject(&:blank?)
-        ids = Project.visible(User.current).where(identifier: identifiers).select(:id)
+      elsif selected_identifiers.any?
+        ids = Project.visible(User.current).where(identifier: selected_identifiers).select(:id)
         scope = scope.where(work_packages: { project_id: ids })
       end
       if params[:author].present?
@@ -91,17 +89,13 @@ module Flightplan
         .find(id)
     end
 
-    def inbox_path(anchor: nil)
-      options = {
-        author: params[:author].presence,
-        all: params[:all].presence,
-        projects: params[:projects].presence,
-        anchor:
-      }.compact
-      if @project
-        project_flightplan_questions_path(@project, options)
+    # Zurück an die Stelle, von der das Widget-Formular kam; die Dashboard-Seite nur für Admins.
+    def return_path(anchor)
+      options = { Flightplan::QuestionsWidget::PARAM => params[Flightplan::QuestionsWidget::PARAM].presence, anchor: }.compact
+      if params[:return_to] == "dashboard" && User.current.admin?
+        flightplan_dashboard_path(options)
       else
-        flightplan_questions_path(options)
+        root_path(options)
       end
     end
   end
