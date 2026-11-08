@@ -465,3 +465,22 @@
     white-space: nowrap;
   }
 }
+
+/* #1618: Enterprise advertising that is rendered by compiled Angular or the icon font. Presentation only. */
+.upsell-colored,
+.upsell-colored-text,
+.upsell-colored-background,
+.op-enterprise-banner,
+.widget-box--upsell-block,
+.controller-homescreen .widget-box.upsell,
+a[href*="ee-upsell"],
+a[href*="op_edition=community-edition"],
+a[href*="/enterprise_plans"] {
+  display: none !important;
+}
+
+/* #1629: Admin entry "Enterprise": hide only the gem glyph of the menu entry and the admin overview tile, never icons of /admin/enterprise_tokens/* buttons. */
+a.op-menu--item-action[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addons,
+a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addons {
+  display: none !important;
+}
