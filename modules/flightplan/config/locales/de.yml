@@ -88,6 +88,20 @@ de:
       dashboard_admin_only: "Das ADA Dashboard sehen nur Administratoren."
       dashboard_links_html: "Ihre Arbeit finden Sie im %{board} und unter %{questions}."
       board: Board
+    widgets:
+      search: Suchen …
+      search_in: "%{title} durchsuchen"
+      tools: "Suche und Filter: %{title}"
+      scope: Projekt oder Bereich
+      scope_all: Alle Projekte
+      bereiche: Bereiche
+      status: Status
+      status_all: Alle Status
+      labels: Labels
+      reset: Zurücksetzen
+      none: Keine Treffer für diese Suche.
+      count: Einträge (sichtbar von gesamt)
+      open_blocked: offen / blockiert
     dashboard:
       menu: ADA Dashboard
       title: ADA Dashboard

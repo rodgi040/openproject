@@ -116,8 +116,8 @@ RSpec.describe "Flightplan approvals", type: :rails_request do
     it "shows the button only for Geplant or Wartet auf Mensch with Master op" do
       get "/flightplan/dashboard"
       expect(response.body).to include("Starten freigeben")
-      expect(response.body[/<tr data-wp="#{op_wp.id}">.*?<\/tr>/m]).to include("Starten freigeben", "fp-approve-check")
-      expect(response.body[/<tr data-wp="#{gh_wp.id}">.*?<\/tr>/m]).not_to include("Starten freigeben")
+      expect(response.body[/<tr data-wp="#{op_wp.id}"[^>]*>.*?<\/tr>/m]).to include("Starten freigeben", "fp-approve-check")
+      expect(response.body[/<tr data-wp="#{gh_wp.id}"[^>]*>.*?<\/tr>/m]).not_to include("Starten freigeben")
       expect(response.body).to include("Ausgewählte zum Start freigeben")
     end
 

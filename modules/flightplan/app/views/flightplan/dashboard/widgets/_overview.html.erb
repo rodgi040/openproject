@@ -1,0 +1,34 @@
+<% dash_path = ->(**opts) { controller.is_a?(::HomescreenController) ? root_path(**opts) : flightplan_dashboard_path(**opts) } %>
+<% entries = @dashboard.tiles.flat_map { |tile| tile[:projects].map { |project| { bereich: tile[:label], path: project[:path], statuses: project[:statuses], labels: project[:labels] } } } %>
+<% filters = Flightplan::WidgetFilters.new(entries, tree: @dashboard.project_tree, status_order: @dashboard.status_order) %>
+<%= render layout: "flightplan/dashboard/widget", locals: { key: "overview", title: t("flightplan.dashboard.tiles.title"), title_id: "fp-dash-tiles-title", filters: } do %>
+  <div class="fp-dash-grid">
+    <% @dashboard.tiles.each do |tile| %>
+      <% key = tile[:key] %>
+      <% area = ->(text, **opts) { key ? link_to(text, flightplan_board_path(bereich: key), data: { turbo: false }, **opts) : text } %>
+      <article class="fp-dash-tile" data-fp-group data-tile="bereich" data-bereich-tile="<%= tile[:label] %>">
+        <h3><%= area.(tile[:label], class: "fp-dash-tile-link") %></h3>
+        <dl class="fp-dash-stats">
+          <div data-stat="projects"><dt><%= t("flightplan.dashboard.tiles.projects") %></dt>
+            <dd><span class="fp-dash-num"><%= area.(tile[:project_count]) %></span></dd></div>
+          <div data-stat="open"><dt><%= t("flightplan.dashboard.tiles.open") %></dt>
+            <dd><span class="fp-dash-num"><%= area.(tile[:open]) %></span></dd></div>
+          <div data-stat="blocked"><dt><%= t("flightplan.dashboard.tiles.blocked") %></dt>
+            <dd><span class="fp-dash-num"><%= key ? link_to(tile[:blocked], dash_path.(bereich: key, anchor: "fp-dash-attention-title"), data: { turbo: false }) : tile[:blocked] %></span></dd></div>
+          <div data-stat="questions"><dt><%= t("flightplan.dashboard.tiles.questions") %></dt>
+            <dd><span class="fp-dash-num"><%= tile[:project_identifiers].any? ? link_to(tile[:questions], flightplan_questions_path(projects: tile[:project_identifiers].join(",")), data: { turbo: false }) : tile[:questions] %></span></dd></div>
+          <div data-stat="agents"><dt><%= t("flightplan.dashboard.tiles.agents") %></dt>
+            <dd><% if tile[:agents].nil? %><span class="fp-dash-off"><%= t("flightplan.dashboard.not_active") %></span><% else %><span class="fp-dash-num"><%= link_to(tile[:agents], "#fp-tile-agents") %></span><% end %></dd></div>
+        </dl>
+        <ul class="fp-dash-projects">
+          <% tile[:projects].each do |project| %>
+            <%= tag.li(data: { depth: [project[:depth], 4].min, **Flightplan::WidgetFilters.item_data(bereich: tile[:label], path: project[:path], statuses: project[:statuses], labels: project[:labels]) }) do %>
+              <%= link_to project[:name], flightplan_board_path(projects: project[:identifier]), data: { turbo: false } %>
+              <span title="<%= t("flightplan.widgets.open_blocked") %>"><%= project[:open] %> / <%= project[:blocked] %></span>
+            <% end %>
+          <% end %>
+        </ul>
+      </article>
+    <% end %>
+  </div>
+<% end %>

@@ -1,0 +1,36 @@
+<% snaps = @dashboard.snapshots %>
+<% inactive = ->(source) { t("flightplan.dashboard.inactive.#{source.reason || :missing}", default: t("flightplan.dashboard.inactive.missing")) } %>
+<% source = snaps[:dispatch] %>
+<% slots = source.data? && source.data["slots"].is_a?(Hash) ? source.data["slots"] : nil %>
+<% running = slots ? (@dashboard.running || []) : [] %>
+<% entries = running.map { |entry| { bereich: entry[:bereich], path: entry[:project_path], statuses: [entry[:status]].compact, labels: entry[:labels] } } %>
+<% filters = Flightplan::WidgetFilters.new(entries, tree: @dashboard.project_tree, status_order: @dashboard.status_order) %>
+<%= render layout: "flightplan/dashboard/widget", locals: { key: "running", title: t("flightplan.dashboard.tiles.slots"), filters: } do %>
+  <article class="fp-widget-block" id="fp-tile-agents" data-tile="agents">
+    <% if source.inactive? || slots.nil? %>
+      <p class="fp-dash-off"><%= t("flightplan.dashboard.not_active") %></p>
+      <p class="fp-dash-hint"><%= source.inactive? ? inactive.(source) : t("flightplan.dashboard.inactive.invalid") %></p>
+    <% else %>
+      <p>
+        <span class="fp-dash-num"><%= slots["belegt"].is_a?(Integer) ? slots["belegt"] : "?" %></span> /
+        <span class="fp-dash-num"><%= slots["maximum"].is_a?(Integer) ? slots["maximum"] : "?" %></span>
+        <%= t("flightplan.dashboard.tiles.slots_used") %>
+        <% if source.stale? %><span class="fp-dash-stale"><%= t("flightplan.dashboard.stale", age: Flightplan::Dashboard.age_label(source.age)) %></span><% end %>
+      </p>
+      <p class="fp-dash-hint"><%= t("flightplan.dashboard.tiles.queue", count: Array(source.data["queue"]).size) %></p>
+      <h3><%= t("flightplan.dashboard.tiles.running_title") %></h3>
+      <% if running.empty? %>
+        <p class="fp-dash-hint" data-running="none"><%= t("flightplan.dashboard.tiles.running_none") %></p>
+      <% else %>
+        <ul class="fp-widget-list" data-running="list">
+          <% running.each do |entry| %>
+            <%= tag.li(data: Flightplan::WidgetFilters.item_data(bereich: entry[:bereich], path: entry[:project_path], statuses: [entry[:status]].compact, labels: entry[:labels])) do %>
+              <%= link_to "##{entry[:id]} #{entry[:subject].to_s.truncate(60)}", flightplan_workplace_path(entry[:id]), data: { turbo: false } %>
+              <span><%= entry[:project] %> · <%= [entry[:harness].presence, entry[:model]].compact.join(" ") %></span>
+            <% end %>
+          <% end %>
+        </ul>
+      <% end %>
+    <% end %>
+  </article>
+<% end %>

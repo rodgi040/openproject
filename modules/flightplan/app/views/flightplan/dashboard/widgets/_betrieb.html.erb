@@ -1,0 +1,48 @@
+<% snaps = @dashboard.snapshots %>
+<% color = ->(value) { Flightplan::DashboardSnapshots.color(value) } %>
+<% lamp = ->(value) { t("flightplan.dashboard.lamp.#{color.(value)}") } %>
+<% inactive = ->(source) { t("flightplan.dashboard.inactive.#{source.reason || :missing}", default: t("flightplan.dashboard.inactive.missing")) } %>
+<% health = snaps[:health] %>
+<% engine_source = snaps[:engine] %>
+<% checks = health.inactive? ? [] : Array(health.data["pruefungen"]).first(20).select { |check| check.is_a?(Hash) } %>
+<% engine = !engine_source.inactive? && engine_source.data["engine"].is_a?(Hash) ? engine_source.data["engine"] : {} %>
+<% plugin = !engine_source.inactive? && engine_source.data["plugin"].is_a?(Hash) ? engine_source.data["plugin"] : {} %>
+<% versions = engine_source.inactive? ? [] : [[t("flightplan.dashboard.tiles.engine_version"), engine], [t("flightplan.dashboard.tiles.plugin_version"), plugin]] %>
+<% entries = checks.map { |check| { statuses: [lamp.(check["ampel"])] } } + versions.map { |_, part| { statuses: [lamp.(part["ampel"])] } } %>
+<% lamp_order = %w[gruen gelb rot unbekannt].map { |key| t("flightplan.dashboard.lamp.#{key}") } %>
+<% filters = Flightplan::WidgetFilters.new(entries, status_order: lamp_order, scope: false) %>
+<%= render layout: "flightplan/dashboard/widget", locals: { key: "betrieb", title: t("flightplan.dashboard.tiles.health"), filters: } do %>
+  <article class="fp-widget-block" data-tile="health">
+    <% if health.inactive? %>
+      <p class="fp-dash-off"><%= t("flightplan.dashboard.not_active") %></p>
+      <p class="fp-dash-hint"><%= inactive.(health) %></p>
+    <% else %>
+      <% overall = color.(health.data["gesamt"]) %>
+      <p><span class="fp-dash-lamp" data-lamp="<%= overall %>"><%= t("flightplan.dashboard.lamp.#{overall}") %></span>
+        <% if health.stale? %><span class="fp-dash-stale"><%= t("flightplan.dashboard.stale", age: Flightplan::Dashboard.age_label(health.age)) %></span><% end %></p>
+      <ul class="fp-widget-list">
+        <% checks.each do |check| %>
+          <%= tag.li(data: Flightplan::WidgetFilters.item_data(statuses: [lamp.(check["ampel"])])) do %><%= check["name"].to_s.truncate(40) %>
+            <span class="fp-dash-lamp" data-lamp="<%= color.(check["ampel"]) %>"><%= lamp.(check["ampel"]) %></span><% end %>
+        <% end %>
+      </ul>
+    <% end %>
+  </article>
+
+  <article class="fp-widget-block" data-tile="engine">
+    <h3><%= t("flightplan.dashboard.tiles.engine") %></h3>
+    <% if engine_source.inactive? %>
+      <p class="fp-dash-off"><%= t("flightplan.dashboard.not_active") %></p>
+      <p class="fp-dash-hint"><%= inactive.(engine_source) %></p>
+    <% else %>
+      <p><span class="fp-dash-lamp" data-lamp="<%= color.(engine_source.data["gesamt"]) %>"><%= lamp.(engine_source.data["gesamt"]) %></span>
+        <% if engine_source.stale? %><span class="fp-dash-stale"><%= t("flightplan.dashboard.stale", age: Flightplan::Dashboard.age_label(engine_source.age)) %></span><% end %></p>
+      <ul class="fp-widget-list">
+        <% versions.each do |name, part| %>
+          <%= tag.li(data: Flightplan::WidgetFilters.item_data(statuses: [lamp.(part["ampel"])])) do %><%= name %>: <%= part["version"].to_s.truncate(40).presence || "–" %>
+            <span class="fp-dash-lamp" data-lamp="<%= color.(part["ampel"]) %>"><%= lamp.(part["ampel"]) %></span><% end %>
+        <% end %>
+      </ul>
+    <% end %>
+  </article>
+<% end %>

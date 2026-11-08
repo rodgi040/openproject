@@ -1,0 +1,14 @@
+<%# OP#1672: Label-Filter als Mehrfachauswahl. Je Gruppe ein Fieldset; Kategorien (OP#1670) liefert WidgetFilters.label_groups. %>
+<details class="fp-widget-labels" data-fp-filter="labels">
+  <summary><%= t("flightplan.widgets.labels") %> <span class="fp-widget-labels-count" data-fp-labels-count></span></summary>
+  <div class="fp-widget-labels-pop">
+    <% groups.each do |group| %>
+      <fieldset data-fp-label-group="<%= group[:key] %>" aria-label="<%= group[:title] || t("flightplan.widgets.labels") %>">
+        <% if group[:title] %><legend><%= group[:title] %></legend><% end %>
+        <% group[:names].each do |name| %>
+          <label class="fp-widget-label-option"><input type="checkbox" value="<%= name %>"> <%= name %></label>
+        <% end %>
+      </fieldset>
+    <% end %>
+  </div>
+</details>

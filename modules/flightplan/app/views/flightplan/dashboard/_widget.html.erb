@@ -1,0 +1,43 @@
+<%# OP#1672: Hülle eines Insel-Widgets. Locals: key, title, filters (Flightplan::WidgetFilters), optional title_id. %>
+<% title_id = local_assigns[:title_id] || "fp-widget-#{key}-title" %>
+<% wide = Flightplan::WidgetFilters::WIDE.include?(key) %>
+<section class="fp-widget<%= " fp-widget--wide" if wide %>" id="fp-widget-<%= key %>" data-fp-widget="<%= key %>" aria-labelledby="<%= title_id %>">
+  <header class="fp-widget-head">
+    <h2 id="<%= title_id %>"><%= title %></h2>
+    <span class="fp-widget-count" data-fp-widget-count title="<%= t("flightplan.widgets.count") %>"><%= filters.count %></span>
+  </header>
+  <div class="fp-widget-tools" data-fp-widget-tools role="search" aria-label="<%= t("flightplan.widgets.tools", title:) %>">
+    <input type="search" class="fp-widget-search" data-fp-filter="text" placeholder="<%= t("flightplan.widgets.search") %>" aria-label="<%= t("flightplan.widgets.search_in", title:) %>">
+    <% scopes = filters.scopes %>
+    <% if scopes.any? %>
+      <select class="fp-widget-select" data-fp-filter="scope" aria-label="<%= t("flightplan.widgets.scope") %>">
+        <option value=""><%= t("flightplan.widgets.scope_all") %></option>
+        <% scopes.each do |group| %>
+          <optgroup label="<%= group[:title] %>">
+            <% group[:options].each do |option| %>
+              <option value="<%= option[:value] %>"><%= ("\u00A0\u00A0" * option[:depth]) + option[:label] %></option>
+            <% end %>
+          </optgroup>
+        <% end %>
+      </select>
+    <% end %>
+    <% statuses = filters.statuses %>
+    <% if statuses.any? %>
+      <select class="fp-widget-select" data-fp-filter="status" aria-label="<%= t("flightplan.widgets.status") %>">
+        <option value=""><%= t("flightplan.widgets.status_all") %></option>
+        <% statuses.each do |status| %>
+          <option value="<%= status %>"><%= status %></option>
+        <% end %>
+      </select>
+    <% end %>
+    <% label_groups = filters.label_groups %>
+    <% if label_groups.any? %>
+      <%= render "flightplan/dashboard/label_filter", groups: label_groups %>
+    <% end %>
+    <button type="button" class="fp-widget-reset" data-fp-filter-reset hidden><%= t("flightplan.widgets.reset") %></button>
+  </div>
+  <div class="fp-widget-body" data-fp-widget-body tabindex="0">
+    <%= yield %>
+    <p class="fp-widget-none fp-dash-hint" data-fp-widget-none hidden><%= t("flightplan.widgets.none") %></p>
+  </div>
+</section>

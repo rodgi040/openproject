@@ -26,18 +26,25 @@ module Flightplan
     # Freigabe: von diesen Status auf Startfreigabe, nur bei Master "op".
     APPROVABLE_STATUSES = ["Geplant", STATUS_WAITING].freeze
     MASTER_FIELD = "Master"
+    LABELS_FIELD = "Labels"
     STATUS_IDS_CACHE_SECONDS = 300
     STATUS_IDS_CACHE_KEY = "flightplan-dashboard-status-ids"
     REQUIRED_STATUSES = [STATUS_WAITING, STATUS_START, STATUS_PROGRESS, *APPROVABLE_STATUSES].uniq.freeze
     # Nur diese Konten zählen als Absender der Startfehler-Notizen (ada-dispatch nutzt per fp-op `dispatcher`,
     # siehe openproject/orchestrator/README.md). Notizen anderer Autoren lösen keinen Alarm aus.
     FAILED_START_AUTHORS = %w[dispatcher].freeze
+    # Version im Cache-Schlüssel: Ändert sich die Form der gecachten Daten, liest kein Prozess alte Einträge.
+    CACHE_VERSION = 2
+
+    def self.cache_key(user_id)
+      ["flightplan-dashboard", CACHE_VERSION, user_id]
+    end
 
     def self.load(user:, params:, now: Time.current, snapshots: nil)
       new(user, params, now, snapshots).load
     end
 
-    attr_reader :tiles, :snapshots, :running, :missing_statuses
+    attr_reader :tiles, :snapshots, :running, :missing_statuses, :project_tree, :status_order
 
     def initialize(user, params, now, snapshots)
       @user = user
@@ -47,7 +54,7 @@ module Flightplan
     end
 
     def load
-      key = ["flightplan-dashboard", @user.id]
+      key = self.class.cache_key(@user.id)
       data = Rails.cache.read(key)
       if data.nil?
         data = compute
@@ -58,6 +65,8 @@ module Flightplan
       @tiles = data[:tiles]
       @running = data[:running]
       @missing_statuses = data[:missing_statuses] || []
+      @project_tree = data[:project_tree]
+      @status_order = data[:status_order]
       self
     end
 
@@ -144,16 +153,44 @@ module Flightplan
 
     def compute
       bereiche = project_bereiche
-      running = running_agents
+      running = running_agents(bereiche)
       { rows: attention_rows(bereiche), tiles: build_tiles(bereiche, running), running:,
-        missing_statuses: self.class.missing_statuses }
+        missing_statuses: self.class.missing_statuses,
+        project_tree: tree_order.map { |entry| entry.merge(bereich: bereiche[entry[:id]]) },
+        status_order: Status.order(:position).pluck(:name) }
     end
 
-    # project_id => { identifier:, name:, bereich: }
+    # project_id => { identifier:, name:, parent_id: }
     def projects_by_id
-      @projects_by_id ||= Project.visible(@user).pluck(:id, :identifier, :name).to_h do |id, identifier, name|
-        [id, { identifier:, name: }]
+      @projects_by_id ||= Project.visible(@user).pluck(:id, :identifier, :name, :parent_id).to_h do |id, identifier, name, parent_id|
+        [id, { identifier:, name:, parent_id: }]
       end
+    end
+
+    # Sichtbare Projekte in Baumreihenfolge (Kinder nach Name), mit Tiefe und Pfad (eigener Identifier zuerst, dann die
+    # Vorfahren). Ein Projekt, dessen Elternprojekt nicht sichtbar ist, steht oben.
+    def tree_order
+      @tree_order ||= begin
+        children = {}
+        projects_by_id.each do |id, project|
+          parent = projects_by_id.key?(project[:parent_id]) ? project[:parent_id] : nil
+          (children[parent] ||= []) << id
+        end
+        order = []
+        walk = lambda do |parent, depth, path|
+          Array(children[parent]).sort_by { |id| [projects_by_id[id][:name].downcase, id] }.each do |id|
+            own = [projects_by_id[id][:identifier], *path]
+            order << { id:, identifier: own.first, name: projects_by_id[id][:name], depth:, path: own }
+            walk.(id, depth + 1, own)
+          end
+        end
+        walk.(nil, 0, [])
+        order
+      end
+    end
+
+    def project_paths
+      @project_paths ||= tree_order.to_h { |entry| [entry[:id], entry[:path]] }
     end
 
     def project_bereiche
@@ -185,6 +222,7 @@ module Flightplan
       changed = status_changed_at(wp_ids)
       waiting_ids = found.select { |row| row[3] == ids[STATUS_WAITING] }
       context = {
+        labels: work_package_labels(wp_ids),
         agents: assignee_names(found.filter_map { |row| row[4] }),
         status_names: Status.where(id: found.map { |row| row[3] }.uniq).pluck(:id, :name).to_h,
         changed:,
@@ -197,7 +235,7 @@ module Flightplan
         next unless project
 
         row_for(
-          { id:, subject:, status_id:, assignee_id:, updated_at:, lock_version: },
+          { id:, subject:, project_id:, status_id:, assignee_id:, updated_at:, lock_version: },
           project, bereiche[project_id], oldest_questions[id], cut, context
         )
       end
@@ -227,6 +265,7 @@ module Flightplan
       approvable = APPROVABLE_STATUSES.include?(status) && context[:masters][wp[:id]] == "op"
       {
         id: wp[:id], subject: wp[:subject], project: project[:name], project_identifier: project[:identifier],
+        project_path: project_paths[wp[:project_id]] || [project[:identifier]], labels: context[:labels][wp[:id]] || [],
         bereich:, status:, agent: context[:agents][wp[:assignee_id]], reasons:, since:,
         age_seconds: [(@now - since).to_i, 0].max, lock_version: wp[:lock_version], approvable:
       }
@@ -286,6 +325,41 @@ module Flightplan
         .pluck(:customized_id, :value).to_h { |id, value| [id, options[value.to_s]] }
     end
 
+    def labels_field
+      return @labels_field if defined?(@labels_field)
+
+      @labels_field = WorkPackageCustomField.find_by(name: LABELS_FIELD)
+    end
+
+    def label_names
+      @label_names ||= labels_field ? labels_field.custom_options.pluck(:id, :value).to_h { |id, value| [id.to_s, value] } : {}
+    end
+
+    # Labels je Arbeitspaket in der Reihenfolge der Zuordnung, eine Abfrage.
+    def work_package_labels(wp_ids)
+      return {} if labels_field.nil? || wp_ids.empty?
+
+      CustomValue.where(customized_type: "WorkPackage", custom_field_id: labels_field.id, customized_id: wp_ids)
+        .order(:id).pluck(:customized_id, :value).each_with_object({}) do |(id, value), found|
+          name = label_names[value.to_s]
+          (found[id] ||= []) << name if name.present?
+        end
+    end
+
+    # Labels der offenen Arbeitspakete je Projekt, eine Abfrage.
+    def project_labels(scope)
+      return {} if labels_field.nil?
+
+      scope.joins("INNER JOIN custom_values fp_labels ON fp_labels.customized_type = 'WorkPackage' " \
+                  "AND fp_labels.customized_id = work_packages.id")
+        .where("fp_labels.custom_field_id = ?", labels_field.id).distinct
+        .pluck("work_packages.project_id", "fp_labels.value").each_with_object({}) do |(project_id, value), found|
+          name = label_names[value.to_s]
+          (found[project_id] ||= []) << name if name.present?
+        end
+        .transform_values { |names| names.uniq.sort_by(&:downcase) }
+    end
+
     def assignee_names(ids)
       User.where(id: ids.uniq).pluck(:id, :firstname, :lastname, :login).to_h do |id, first, last, login|
         [id, [first, last].compact_blank.join(" ").presence || login]
@@ -294,7 +368,7 @@ module Flightplan
 
     # Laufende Agents (H5): Starts aus dispatch.json (letzte_starts), deren Ticket jetzt "In Arbeit" ist.
     # nil, wenn dispatch.json fehlt oder unbrauchbar ist ("nicht aktiv").
-    def running_agents
+    def running_agents(bereiche)
       source = @snapshots[:dispatch]
       return nil if source.inactive?
 
@@ -305,13 +379,17 @@ module Flightplan
       progress_id = self.class.status_ids[STATUS_PROGRESS]
       return [] if starts.empty? || progress_id.nil?
 
-      WorkPackage.visible(@user).where(id: starts.keys.first(200), status_id: progress_id)
-        .pluck(:id, :subject, :project_id).filter_map do |id, subject, project_id|
+      found = WorkPackage.visible(@user).where(id: starts.keys.first(200), status_id: progress_id)
+        .pluck(:id, :subject, :project_id)
+      labels = work_package_labels(found.map(&:first))
+      found.filter_map do |id, subject, project_id|
         project = projects_by_id[project_id]
         next unless project
 
         entry = starts[id]
-        { id:, subject:, project_id:, project: project[:name], harness: entry["harness"].to_s.truncate(40),
+        { id:, subject:, project_id:, project: project[:name], bereich: bereiche[project_id],
+          project_path: project_paths[project_id] || [project[:identifier]], labels: labels[id] || [],
+          status: STATUS_PROGRESS, harness: entry["harness"].to_s.truncate(40),
           model: entry["modell"].to_s.truncate(60).presence, started: parse_time(entry["gestartet"]) }
       end
     end
@@ -329,8 +407,10 @@ module Flightplan
       blocked = scope.where(work_packages: { status_id: ids[STATUS_WAITING] }).group(:project_id).count
       progress = scope.where(work_packages: { status_id: ids[STATUS_PROGRESS] }).group(:project_id).count
       questions = open_questions_by_project(scope)
+      statuses = open_statuses_by_project(scope)
+      labels = project_labels(scope)
       (BEREICHE.values + [NO_BEREICH]).filter_map do |label|
-        project_ids = projects_by_id.keys.select { |id| bereiche[id] == label }
+        project_ids = tree_order.filter_map { |entry| entry[:id] if bereiche[entry[:id]] == label }
         next if project_ids.empty?
 
         {
@@ -342,12 +422,27 @@ module Flightplan
           questions: project_ids.sum { |id| questions[id].to_i },
           agents: running && running.count { |entry| project_ids.include?(entry[:project_id]) },
           projects: project_ids.map do |id|
+            path = project_paths[id]
             { identifier: projects_by_id[id][:identifier], name: projects_by_id[id][:name],
-              open: open[id].to_i, blocked: blocked[id].to_i }
-          end.sort_by { |project| [-project[:open], project[:name].downcase] },
+              open: open[id].to_i, blocked: blocked[id].to_i, path:,
+              depth: path.drop(1).count { |identifier| bereiche[project_id_for(identifier)] == label },
+              statuses: statuses[id] || [], labels: labels[id] || [] }
+          end,
           project_identifiers: project_ids.map { |id| projects_by_id[id][:identifier] }
         }
       end
+    end
+
+    def project_id_for(identifier)
+      @project_ids_by_identifier ||= projects_by_id.to_h { |id, project| [project[:identifier], id] }
+      @project_ids_by_identifier[identifier]
+    end
+
+    # Status der offenen Arbeitspakete je Projekt (Statusreihenfolge), eine Abfrage.
+    def open_statuses_by_project(scope)
+      scope.group(:project_id, "statuses.name", "statuses.position").count.keys
+        .sort_by { |_, _, position| position.to_i }
+        .each_with_object({}) { |(project_id, name, _), found| (found[project_id] ||= []) << name }
     end
 
     # Offene Rückfragen je Projekt (nur zu offenen, sichtbaren Arbeitspaketen).
