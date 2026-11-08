@@ -5,8 +5,10 @@ module Flightplan
   # gefiltert wird im Browser (flightplan.js, fpWidgetFilters). Ein Eintrag ist ein Hash mit :bereich, :path
   # (Projekt-Identifier, eigener zuerst, dann die Vorfahren), :statuses und :labels.
   class WidgetFilters
-    ORDER = %w[overview attention questions running betrieb].freeze
-    WIDE = %w[overview attention questions].freeze
+    ORDER = %w[overview attention questions board running betrieb].freeze
+    WIDE = %w[overview attention questions board].freeze
+    # Für Nicht-Admins (kein Dashboard, OP#1673/OP#1674).
+    MEMBER_ORDER = %w[questions board].freeze
 
     attr_reader :entries
 
@@ -17,16 +19,17 @@ module Flightplan
       @scope = scope
     end
 
-    # Kategorien kommen mit dem Label-Konzept (OP#1670). Bis dahin eine Gruppe ohne Titel; die Ansicht rendert je
-    # Gruppe ein Fieldset, das Skript verknüpft Gruppen mit UND und Labels einer Gruppe mit ODER.
+    # Gruppen nach Label-Familie (OP#1674, Flightplan::LabelFamilies), ohne Status-, Warte- und Art-Familie. Die Ansicht
+    # rendert je Gruppe ein Fieldset mit Überschrift, das Skript verknüpft Gruppen mit UND und Labels einer Gruppe mit ODER.
     def self.label_groups(names)
-      names = names.compact_blank.uniq.sort_by { |name| [name.downcase, name] }
-      names.empty? ? [] : [{ key: "alle", title: nil, names: }]
+      LabelFamilies.groups(names)
     end
 
-    def self.item_data(bereich: nil, path: [], statuses: [], labels: [])
+    # agents: Filterwerte für eine Auswahl mit data-fp-filter-attr="agents"; open: false für geschlossene Einträge (zählen
+    # nicht für die angebotenen Labels).
+    def self.item_data(bereich: nil, path: [], statuses: [], labels: [], agents: nil, open: true)
       { fp_item: "", fp_area: bereich, fp_projects: Array(path).to_json, fp_statuses: Array(statuses).to_json,
-        fp_labels: Array(labels).to_json }.compact
+        fp_labels: Array(labels).to_json, fp_agents: agents&.to_json, fp_open: ("0" unless open) }.compact
     end
 
     def count

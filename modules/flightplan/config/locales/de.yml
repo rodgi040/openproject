@@ -41,7 +41,19 @@ de:
       agents: Agenten
       inbox: Rückfragen
       wiki: Wiki
-      rejected_show: Abgelehnt
+      rejected_show: Abgelehnt zeigen
+      rejected_hide: Abgelehnt ausblenden
+      widget_title: Board
+      wiki_of: "Wiki von %{name}"
+      bereich_open: "Offene Pakete in diesem Bereich; Klick filtert das Board"
+      agents_all: Alle Agenten
+      priority: Priorität
+      no_path_hint: "Startfreigabe ohne Ausführungsweg und ohne Agent-Label (claude, codex)"
+      label_pick: "Nach %{name} filtern"
+      preset_reset: Vorauswahl aufheben
+      preset_hint: "Das Board ist nach dem Link vorgefiltert (Projekt, Bereich, Label oder Agent)."
+      move_failed: Statuswechsel abgelehnt
+      drop_off: "Die Spalte „Du setzt um“ folgt dem Label ready-for-human, nicht dem Status. Ziehen Sie die Karte in eine andere Spalte."
       done_all: alle
       done_recent: 14 Tage
       more: "%{count} weitere"
@@ -55,8 +67,9 @@ de:
       conflict: Das Paket wurde zwischenzeitlich geändert.
       columns:
         triage: Triage
+        human: Du setzt um
         question: Rückfrage
-        for_you: Für dich
+        for_you: Freigabe entscheiden
         agent_ready: Agent bereit
         in_progress: In Arbeit
         review: Review
@@ -96,9 +109,11 @@ de:
       chat: "Chat (T3 Code, Gandalf)"
       chat_admin_only: "Der Chat (T3 Code) steht nur Administratoren zur Verfügung. Fragen zu einem Ticket stellen Sie als Kommentar am Ticket."
       dashboard_admin_only: "Das ADA Dashboard sehen nur Administratoren."
-      dashboard_links_html: "Ihre Arbeit finden Sie im %{board}. Offene Rückfragen stehen unten."
-      board: Board
+      dashboard_member: "Unten stehen Ihre offenen Rückfragen und das Board Ihrer Projekte."
     widgets:
+      collapse: Einklappen
+      expand: Ausklappen
+      collapse_named: "%{title} ein- oder ausklappen"
       search: Suchen …
       search_in: "%{title} durchsuchen"
       tools: "Suche und Filter: %{title}"
@@ -134,6 +149,7 @@ de:
         question: offene Rückfrage
         stale: ohne Änderung
         start_failed: Start fehlgeschlagen
+        no_path: Weg fehlt
       attention:
         title: Aufmerksamkeit
         hint: "Wartet auf Mensch, offene Rückfragen, Startfreigabe-Kandidaten und „In Arbeit“ ohne Änderung seit mehr als %{days} Tagen. Das Alter zählt ab dem letzten Statuswechsel, bei Rückfragen ab der Frage."

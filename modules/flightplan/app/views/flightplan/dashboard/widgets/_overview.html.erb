@@ -5,7 +5,7 @@
   <div class="fp-dash-grid">
     <% @dashboard.tiles.each do |tile| %>
       <% key = tile[:key] %>
-      <% area = ->(text, **opts) { key ? link_to(text, flightplan_board_path(bereich: key), data: { turbo: false }, **opts) : text } %>
+      <% area = ->(text, **opts) { link_to(text, dash_path.(board: { bereich: Flightplan::Bereich.key_for(tile[:label]) }, anchor: "fp-widget-board"), data: { turbo: false }, **opts) } %>
       <article class="fp-dash-tile" data-fp-group data-tile="bereich" data-bereich-tile="<%= tile[:label] %>">
         <h3><%= area.(tile[:label], class: "fp-dash-tile-link") %></h3>
         <dl class="fp-dash-stats">
@@ -23,7 +23,7 @@
         <ul class="fp-dash-projects">
           <% tile[:projects].each do |project| %>
             <%= tag.li(data: { depth: [project[:depth], 4].min, **Flightplan::WidgetFilters.item_data(bereich: tile[:label], path: project[:path], statuses: project[:statuses], labels: project[:labels]) }) do %>
-              <%= link_to project[:name], flightplan_board_path(projects: project[:identifier]), data: { turbo: false } %>
+              <%= link_to project[:name], dash_path.(board: { projects: project[:identifier] }, anchor: "fp-widget-board"), data: { turbo: false } %>
               <span title="<%= t("flightplan.widgets.open_blocked") %>"><%= project[:open] %> / <%= project[:blocked] %></span>
             <% end %>
           <% end %>

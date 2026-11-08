@@ -5,6 +5,7 @@ module Flightplan
     def self.call(user:, work_package:, column:, lock_version:)
       spec = Board::COLUMNS.find { |entry| entry[:key] == column.to_s }
       raise Error, "Unbekannte Spalte" unless spec
+      raise Error, I18n.t("flightplan.board.drop_off") if spec[:drop] == false
 
       status = Status.find_by(name: spec[:status])
       raise Error, "Status #{spec[:status]} fehlt" unless status

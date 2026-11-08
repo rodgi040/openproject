@@ -19,10 +19,10 @@ RSpec.describe "Flightplan dashboard widgets", :skip_csrf, type: :rails_request 
     create(:list_project_custom_field, name: "Bereich", project_custom_field_section: section,
                                        possible_values: ["ADA MAIN", "Nuova AI Solutions", "NuovaGen"])
   end
-  let!(:ada) { create(:project, name: "Widget Ada", identifier: "widget-ada", public: false) }
+  let!(:ada) { create(:project, name: "Widget Ada", identifier: "ada-main", public: false) }
   let!(:flight) { create(:project, name: "Widget Flug", identifier: "widget-flug", parent: ada, public: false) }
   let!(:factory) { create(:project, name: "Widget Fabrik", identifier: "widget-fabrik", parent: flight, public: false) }
-  let!(:gen) { create(:project, name: "Widget Gen", identifier: "widget-gen", public: false) }
+  let!(:gen) { create(:project, name: "Widget Gen", identifier: "nuovagen", public: false) }
   let!(:gen_child) { create(:project, name: "Widget Gen Kind", identifier: "widget-gen-kind", parent: gen, public: false) }
   let(:admin) { create(:admin, language: "de") }
   let!(:neu) { ensure_status("Neu") }
@@ -105,7 +105,7 @@ RSpec.describe "Flightplan dashboard widgets", :skip_csrf, type: :rails_request 
         get path
         expect(response).to have_http_status(:ok)
         keys = page.css("#fp-home .fp-home-main .fp-widgets > .fp-widget").map { |node| node["data-fp-widget"] }
-        expect(keys).to eq(%w[overview attention questions running betrieb])
+        expect(keys).to eq(%w[overview attention questions board running betrieb])
         expect(page.at_css("#content-body > #fp-home")).to be_present
       end
     end
@@ -144,7 +144,7 @@ RSpec.describe "Flightplan dashboard widgets", :skip_csrf, type: :rails_request 
       gen_tile = widget("overview").at_css("[data-bereich-tile='NuovaGen']")
       expect(gen_tile.css("[data-fp-item]").map { |node| node["data-depth"] }).to eq(%w[0 1])
       fabrik = ada_tile.css("[data-fp-item]").last
-      expect(item_data(fabrik)).to eq(bereich: "ADA MAIN", projects: %w[widget-fabrik widget-flug widget-ada],
+      expect(item_data(fabrik)).to eq(bereich: "ADA MAIN", projects: %w[widget-fabrik widget-flug ada-main],
                                       statuses: ["Wartet auf Mensch"], labels: ["agent:autonom", "P1"])
     end
 
@@ -152,7 +152,7 @@ RSpec.describe "Flightplan dashboard widgets", :skip_csrf, type: :rails_request 
       get "/"
       tools = widget("overview").at_css("[data-fp-widget-tools]")
       scope = option_values(tools.at_css("select[data-fp-filter='scope']"))
-      expect(scope).to include("bereich:ADA MAIN", "bereich:NuovaGen", "project:widget-ada", "project:widget-flug",
+      expect(scope).to include("bereich:ADA MAIN", "bereich:NuovaGen", "project:ada-main", "project:widget-flug",
                                "project:widget-fabrik", "project:widget-gen-kind")
       expect(option_values(tools.at_css("select[data-fp-filter='status']")))
         .to include("Wartet auf Mensch", "Startfreigabe", "In Arbeit")
@@ -164,7 +164,7 @@ RSpec.describe "Flightplan dashboard widgets", :skip_csrf, type: :rails_request 
       get "/"
       row = widget("attention").at_css("tr[data-wp='#{waiting_wp.id}']")
       expect(row["data-fp-item"]).not_to be_nil
-      expect(item_data(row)).to eq(bereich: "ADA MAIN", projects: %w[widget-fabrik widget-flug widget-ada],
+      expect(item_data(row)).to eq(bereich: "ADA MAIN", projects: %w[widget-fabrik widget-flug ada-main],
                                    statuses: ["Wartet auf Mensch"], labels: ["P1", "agent:autonom"])
       expect(row.css(".fp-dash-label").map(&:text)).to eq(["P1", "agent:autonom"])
       gen_row = widget("attention").at_css("tr[data-wp='#{start_wp.id}']")
@@ -179,17 +179,19 @@ RSpec.describe "Flightplan dashboard widgets", :skip_csrf, type: :rails_request 
       expect(groups.first.at_css("[data-fp-group-count]").text.strip).to eq("1")
       tools = widget("attention").at_css("[data-fp-widget-tools]")
       expect(option_values(tools.at_css("select[data-fp-filter='status']"))).to eq(["Wartet auf Mensch", "Startfreigabe"])
-      expect(option_values(tools.at_css("select[data-fp-filter='scope']"))).to include("bereich:ADA MAIN", "project:widget-gen")
+      expect(option_values(tools.at_css("select[data-fp-filter='scope']"))).to include("bereich:ADA MAIN", "project:nuovagen")
     end
 
-    it "keeps the label filter a plain multiple choice inside one group, ready for categories (OP#1670)" do
+    # OP#1674: Gruppen sind die Label-Familien aus config/label_families.yml, je mit Überschrift.
+    it "groups the label filter by label family, each with a heading" do
       get "/"
       labels = widget("attention").at_css("details[data-fp-filter='labels']")
-      groups = labels.css("fieldset[data-fp-label-group]")
-      expect(groups.size).to eq(1)
-      expect(groups.first.at_css("legend")).to be_nil
+      groups = labels.css("fieldset[data-fp-label-group]").map do |group|
+        [group["data-fp-label-group"], group.at_css("legend").text.strip, group.css("input").map { |box| box["value"] }]
+      end
+      expect(groups).to eq([["prioritaet", "Priorität", ["P1"]], ["projekt", "Projekt-spezifisch", ["<b>fett</b>", "agent:autonom"]]])
       expect(Flightplan::WidgetFilters.label_groups(["b", "a", "b"]))
-        .to eq([{ key: "alle", title: nil, names: %w[a b] }])
+        .to eq([{ key: "projekt", title: "Projekt-spezifisch", names: %w[a b] }])
       expect(Flightplan::WidgetFilters.label_groups([])).to eq([])
     end
 
@@ -197,7 +199,7 @@ RSpec.describe "Flightplan dashboard widgets", :skip_csrf, type: :rails_request 
       get "/"
       entry = items("running").first
       expect(entry.text).to include("Flug laeuft")
-      expect(item_data(entry)).to include(bereich: "ADA MAIN", projects: %w[widget-flug widget-ada], statuses: ["In Arbeit"])
+      expect(item_data(entry)).to include(bereich: "ADA MAIN", projects: %w[widget-flug ada-main], statuses: ["In Arbeit"])
       expect(widget("running").at_css("article#fp-tile-agents[data-tile='agents']")).to be_present
     end
 
@@ -231,11 +233,11 @@ RSpec.describe "Flightplan dashboard widgets", :skip_csrf, type: :rails_request 
 
     current_user { member }
 
-    # OP#1673: nur das Rückfragen-Widget, hier ohne Einträge (keine sichtbaren Arbeitspakete).
-    it "renders no dashboard widget besides the questions" do
+    # OP#1673/OP#1674: nur Rückfragen und Board, hier ohne Einträge (keine sichtbaren Arbeitspakete).
+    it "renders no dashboard widget besides the questions and the board" do
       get "/"
       expect(response).to have_http_status(:ok)
-      expect(page.css(".fp-widgets > .fp-widget").map { |node| node["data-fp-widget"] }).to eq(%w[questions])
+      expect(page.css(".fp-widgets > .fp-widget").map { |node| node["data-fp-widget"] }).to eq(%w[questions board])
       expect(response.body).not_to include("data-fp-item")
     end
   end

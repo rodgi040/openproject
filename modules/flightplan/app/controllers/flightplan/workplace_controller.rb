@@ -7,10 +7,6 @@ module Flightplan
 
     layout "global"
 
-    current_menu_item [:show] do
-      :flightplan
-    end
-
     def show
       work_package = WorkPackage.visible(User.current).find(params[:id])
       @place = Flightplan::Workplace.load(user: User.current, work_package:)

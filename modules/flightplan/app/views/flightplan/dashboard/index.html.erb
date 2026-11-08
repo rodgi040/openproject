@@ -14,16 +14,17 @@
     <% else %>
       <div class="fp-dash-hint" data-fp-dashboard-admin-only>
         <p><%= t("flightplan.home.dashboard_admin_only") %></p>
-        <p><%= t("flightplan.home.dashboard_links_html",
-                 board: link_to(t("flightplan.home.board"), flightplan_board_path, data: { turbo: false })) %></p>
+        <p><%= t("flightplan.home.dashboard_member") %></p>
       </div>
-      <% if @questions_widget %>
-        <div class="fp-dash" id="fp-questions-only">
-          <div class="fp-widgets" data-fp-widgets>
-            <%= render "flightplan/dashboard/widgets/questions" %>
-          </div>
+      <div class="fp-dash" id="fp-questions-only">
+        <div class="fp-widgets" data-fp-widgets>
+          <% Flightplan::WidgetFilters::MEMBER_ORDER.each do |key| %>
+            <% next if key == "questions" && !@questions_widget %>
+            <% next if key == "board" && !@board_widget %>
+            <%= render "flightplan/dashboard/widgets/#{key}" %>
+          <% end %>
         </div>
-      <% end %>
+      </div>
     <% end %>
   </section>
   <%= render "flightplan/home/chat" %>

@@ -60,9 +60,12 @@
   }, true);
 })();
 
+// OP#1674: Board-Widget des ADA-Dashboards. Karten per Drag & Drop über die Move-Route verschieben; nach Erfolg wandert die
+// Karte ohne Neuladen in die Spalte, die der Server meldet (der Chat bleibt stehen).
 (function () {
   var board = document.getElementById("fp-board");
   if (!board) return;
+  var widget = board.closest("[data-fp-widget]");
   var alertBox = document.getElementById("fp-board-alert");
   var dragged = false;
 
@@ -72,44 +75,58 @@
     alertBox.textContent = text;
   }
 
-  board.querySelectorAll("[data-fp-board-card]").forEach(function (card) {
-    card.addEventListener("click", function (event) {
-      if (dragged) {
-        dragged = false;
-        return;
-      }
-      if (event.target.closest("a")) return;
-      var labels = [];
-      try {
-        labels = JSON.parse(card.dataset.labels || "[]");
-      } catch (error) {
-        labels = [];
-      }
-      window.dispatchEvent(new CustomEvent("fp:card-selected", {
-        detail: {
-          id: Number(card.dataset.id),
-          project: card.dataset.project,
-          subject: card.dataset.subject,
-          status: card.dataset.status,
-          labels: labels,
-          url: card.dataset.url
-        }
-      }));
-    });
+  function setCount(column, delta) {
+    var count = Math.max(0, Number(column.dataset.count || 0) + delta);
+    column.dataset.count = String(count);
+    var badge = column.querySelector("[data-fp-group-count]");
+    if (badge) badge.setAttribute("data-fp-total", String(count));
+    var empty = column.querySelector(".fp-empty");
+    var cards = column.querySelectorAll("[data-fp-board-card]").length;
+    if (empty) empty.hidden = cards > 0;
+  }
 
-    card.addEventListener("dragstart", function (event) {
-      if (event.target.closest("a")) {
-        event.preventDefault();
-        return;
+  function place(card, from, to) {
+    var list = to.querySelector(".fp-column-cards");
+    if (!list) return;
+    list.insertBefore(card, list.firstChild);
+    card.dataset.column = to.dataset.column;
+    card.dataset.status = to.dataset.status;
+    setCount(from, -1);
+    setCount(to, 1);
+    if (widget) widget.dispatchEvent(new CustomEvent("fp:refilter"));
+  }
+
+  board.addEventListener("click", function (event) {
+    var card = event.target.closest("[data-fp-board-card]");
+    if (!card) return;
+    if (dragged) {
+      dragged = false;
+      return;
+    }
+    if (event.target.closest("a, button")) return;
+    window.dispatchEvent(new CustomEvent("fp:card-selected", {
+      detail: {
+        id: Number(card.dataset.id),
+        project: card.dataset.project,
+        subject: card.dataset.subject,
+        status: card.dataset.status,
+        labels: fpParseList(card.dataset.labels),
+        url: card.dataset.url
       }
-      dragged = true;
-      event.dataTransfer.setData("text/plain", card.dataset.id);
-      event.dataTransfer.effectAllowed = "move";
-    });
+    }));
+  });
+
+  board.addEventListener("dragstart", function (event) {
+    var card = event.target.closest && event.target.closest("[data-fp-board-card]");
+    if (!card) return;
+    dragged = true;
+    event.dataTransfer.setData("text/plain", card.dataset.id);
+    event.dataTransfer.effectAllowed = "move";
   });
 
   board.querySelectorAll(".fp-column").forEach(function (column) {
     column.addEventListener("dragover", function (event) {
+      if (column.dataset.drop === "off") return;
       event.preventDefault();
       column.classList.add("is-drop");
     });
@@ -119,15 +136,22 @@
     column.addEventListener("drop", function (event) {
       event.preventDefault();
       column.classList.remove("is-drop");
+      dragged = false;
       var id = event.dataTransfer.getData("text/plain");
-      var card = board.querySelector('[data-fp-board-card][data-id="' + id + '"]');
+      var card = board.querySelector('[data-fp-board-card][data-id="' + String(id).replace(/\D/g, "") + '"]');
       if (!card || card.dataset.column === column.dataset.column) return;
+      if (column.dataset.drop === "off") {
+        showMessage(board.dataset.fpDropOffText || "");
+        return;
+      }
+      var from = card.closest(".fp-column");
       var body = new URLSearchParams();
-      body.set("id", id);
+      body.set("id", card.dataset.id);
       body.set("column", column.dataset.column);
       body.set("lock_version", card.dataset.lockVersion);
       fetch(board.dataset.moveUrl, {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "X-CSRF-Token": board.dataset.csrf,
           "Accept": "application/json",
@@ -137,14 +161,53 @@
       }).then(function (response) {
         return response.json().catch(function () { return {}; }).then(function (payload) {
           if (!response.ok || !payload.ok) {
-            showMessage(payload.error || "Statuswechsel abgelehnt");
+            showMessage(payload.error || board.dataset.fpFailedText || "");
             return;
           }
-          window.location.reload();
+          if (alertBox) alertBox.hidden = true;
+          if (payload.lock_version !== undefined) card.dataset.lockVersion = String(payload.lock_version);
+          var target = board.querySelector('.fp-column[data-column="' + (payload.column || column.dataset.column) + '"]') || column;
+          place(card, from, target);
         });
       }).catch(function () {
-        showMessage("Statuswechsel abgelehnt");
+        showMessage(board.dataset.fpFailedText || "");
       });
+    });
+  });
+
+  if (!widget) return;
+  var wikiLink = widget.querySelector("[data-fp-board-wiki]");
+  var wikis = {};
+  try {
+    wikis = JSON.parse((widget.querySelector("[data-fp-board-wikis]") || {}).textContent || "{}");
+  } catch (error) {
+    wikis = {};
+  }
+  var scope = widget.querySelector("[data-fp-filter='scope']");
+
+  // Wiki-Link nur, wenn genau ein Projekt gewählt ist und es ein Wiki hat (OP#1670 D7).
+  function updateWiki() {
+    if (!wikiLink || !scope) return;
+    var value = scope.value || "";
+    var entry = value.indexOf("project:") === 0 ? wikis[value.slice(8)] : null;
+    wikiLink.hidden = !entry;
+    if (entry) {
+      wikiLink.textContent = entry.label;
+      wikiLink.setAttribute("href", entry.href);
+    }
+  }
+
+  if (scope) {
+    scope.addEventListener("change", updateWiki);
+    updateWiki();
+  }
+
+  widget.querySelectorAll("[data-fp-board-bereich]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      if (!scope) return;
+      var value = "bereich:" + button.getAttribute("data-fp-board-bereich");
+      scope.value = scope.value === value ? "" : value;
+      scope.dispatchEvent(new Event("change", { bubbles: true }));
     });
   });
 })();
@@ -392,6 +455,15 @@ function fpMountChat(root, frame) {
     questions = (event.detail && event.detail.items) || [];
     sendState();
   });
+
+  // OP#1674: Klick auf eine Board-Karte im Dashboard gibt dem Chat das Ticket als Kontext.
+  window.addEventListener("fp:card-selected", function (event) {
+    var detail = event.detail || {};
+    if (!detail.id) return;
+    wp = { id: detail.id, subject: detail.subject, project: detail.project, status: detail.status,
+           labels: detail.labels || [], url: detail.url };
+    post({ type: "fp:context", wp: wp });
+  });
 }
 
 (function () {
@@ -480,9 +552,41 @@ function fpWidgetFilters(widget) {
   var scope = tools.querySelector("[data-fp-filter='scope']");
   var status = tools.querySelector("[data-fp-filter='status']");
   var labels = fpLabelFilter(tools.querySelector("[data-fp-filter='labels']"));
+  var attrs = Array.prototype.slice.call(tools.querySelectorAll("select[data-fp-filter-attr]"));
+  var options = Array.prototype.slice.call(tools.querySelectorAll("[data-fp-filter='labels'] input[type='checkbox']"));
   var reset = tools.querySelector("[data-fp-filter-reset]");
   var count = widget.querySelector("[data-fp-widget-count]");
   var none = widget.querySelector("[data-fp-widget-none]");
+
+  // OP#1674: data-fp-total trägt die Zahl vom Server, wenn nicht alle Einträge gerendert sind (Board: 200 je Spalte).
+  function totalOf(node, fallback) {
+    var total = node && node.getAttribute("data-fp-total");
+    return total !== null && total !== undefined && total !== "" ? total : String(fallback);
+  }
+
+  function matchAttrs(item) {
+    return attrs.every(function (select) {
+      if (!select.value) return true;
+      return fpParseList(item.getAttribute("data-fp-" + select.getAttribute("data-fp-filter-attr"))).indexOf(select.value) !== -1;
+    });
+  }
+
+  // OP#1674: Angeboten werden nur Labels, die ein offener Eintrag im übrigen Filter trägt; gewählte bleiben stehen.
+  function narrowLabels(passing) {
+    if (!options.length) return;
+    var present = {};
+    passing.forEach(function (item) {
+      if (item.getAttribute("data-fp-open") === "0") return;
+      fpParseList(item.getAttribute("data-fp-labels")).forEach(function (name) { present[name] = true; });
+    });
+    options.forEach(function (input) {
+      var holder = input.closest("label") || input;
+      holder.hidden = !input.checked && !present[input.value];
+    });
+    tools.querySelectorAll("[data-fp-filter='labels'] [data-fp-label-group]").forEach(function (group) {
+      group.hidden = !group.querySelector("label:not([hidden]) input, input:checked");
+    });
+  }
 
   function matchScope(item, value) {
     var split = value.indexOf(":");
@@ -497,8 +601,10 @@ function fpWidgetFilters(widget) {
     var scopeValue = scope ? scope.value : "";
     var statusValue = status ? status.value : "";
     var labelsOn = labels.active();
-    var active = words.length > 0 || !!scopeValue || !!statusValue || labelsOn;
+    var attrsOn = attrs.some(function (select) { return !!select.value; });
+    var active = words.length > 0 || !!scopeValue || !!statusValue || labelsOn || attrsOn;
     var shown = 0;
+    var passing = [];
     items.forEach(function (item) {
       var itemLabels = fpParseList(item.getAttribute("data-fp-labels"));
       var ok = true;
@@ -508,6 +614,8 @@ function fpWidgetFilters(widget) {
       }
       if (ok && scopeValue) ok = matchScope(item, scopeValue);
       if (ok && statusValue) ok = fpParseList(item.getAttribute("data-fp-statuses")).indexOf(statusValue) !== -1;
+      if (ok && attrsOn) ok = matchAttrs(item);
+      if (ok) passing.push(item);
       if (ok && labelsOn) ok = labels.match(itemLabels);
       item.hidden = !ok;
       // Ausgeblendete Zeilen dürfen nicht unbemerkt mit der Sammelfreigabe abgeschickt werden.
@@ -519,9 +627,10 @@ function fpWidgetFilters(widget) {
       var visible = group.querySelectorAll("[data-fp-item]:not([hidden])").length;
       group.hidden = active && all > 0 && visible === 0;
       var badge = group.querySelector("[data-fp-group-count]");
-      if (badge) badge.textContent = active ? visible + " / " + all : String(all);
+      if (badge) badge.textContent = active ? visible + " / " + all : totalOf(badge, all);
     });
-    if (count) count.textContent = active ? shown + " / " + items.length : String(items.length);
+    if (count) count.textContent = active ? shown + " / " + items.length : totalOf(count, items.length);
+    narrowLabels(passing);
     if (none) none.hidden = !(active && shown === 0);
     if (reset) reset.hidden = !active;
     widget.classList.toggle("is-filtered", active);
@@ -540,12 +649,25 @@ function fpWidgetFilters(widget) {
       if (text) text.value = "";
       if (scope) scope.value = "";
       if (status) status.value = "";
+      attrs.forEach(function (select) { select.value = ""; });
       labels.reset();
       apply();
       if (text) text.focus();
     });
   }
-  var labelBox = tools.querySelector("[data-fp-filter='labels']");
+  widget.addEventListener("fp:refilter", apply);
+  // OP#1674: Klick auf einen Label-Chip einer Karte setzt diesen Label-Filter (statt zu einem Wiki zu springen).
+  widget.addEventListener("click", function (event) {
+    var pick = event.target.closest && event.target.closest("[data-fp-label-pick]");
+    if (!pick) return;
+    event.preventDefault();
+    var name = pick.getAttribute("data-fp-label-pick");
+    var input = options.filter(function (box) { return box.value === name; })[0];
+    if (!input) return;
+    input.checked = !input.checked;
+    apply();
+  });
+  var labelBox = tools.querySelector("details[data-fp-filter='labels']");
   if (labelBox) {
     document.addEventListener("click", function (event) {
       if (labelBox.open && !labelBox.contains(event.target)) labelBox.open = false;
@@ -564,6 +686,27 @@ function fpWidgetFilters(widget) {
 
 (function () {
   document.querySelectorAll("[data-fp-widget]").forEach(fpWidgetFilters);
+})();
+
+// OP#1674: Einklappbare Widgets (Board). Der Zustand bleibt je Widget im Browser gespeichert.
+(function () {
+  document.querySelectorAll("[data-fp-widget-toggle]").forEach(function (button) {
+    var widget = button.closest("[data-fp-widget]");
+    if (!widget) return;
+    var key = "fp-widget-collapsed-" + widget.getAttribute("data-fp-widget");
+    function set(collapsed) {
+      widget.classList.toggle("is-collapsed", collapsed);
+      button.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      button.title = button.getAttribute(collapsed ? "data-fp-label-closed" : "data-fp-label-open") || "";
+      try { window.localStorage.setItem(key, collapsed ? "1" : "0"); } catch (error) { /* privat */ }
+    }
+    var stored = null;
+    try { stored = window.localStorage.getItem(key); } catch (error) { stored = null; }
+    if (stored === "1") set(true);
+    button.addEventListener("click", function () {
+      set(!widget.classList.contains("is-collapsed"));
+    });
+  });
 })();
 
 // OP#1673: Antwort im Widget „Rückfragen“ ohne Neuladen. Ohne Skript schickt das Formular normal ab und die Seite kommt

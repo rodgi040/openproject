@@ -987,3 +987,296 @@ a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addon
 .fp-q-note.is-error {
   color: var(--fgColor-danger, #d1242f);
 }
+
+/* OP#1674: Board als Insel-Widget. Feste Höhe, die Spalten scrollen waagerecht im Widget, jede Spalte senkrecht in sich;
+   die Hauptspalte wird dadurch nur um eine Widget-Höhe länger. Einklappbar über den Knopf im Kopf. */
+.fp-widget-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.fp-widget.is-collapsed,
+.fp-widget[data-fp-widget].is-collapsed {
+  height: auto;
+}
+
+.fp-widget.is-collapsed .fp-widget-content {
+  display: none;
+}
+
+.fp-widget-head {
+  flex-wrap: wrap;
+}
+
+.fp-widget-toggle {
+  align-self: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: 6px;
+  background: var(--bgColor-default, #ffffff);
+  color: var(--fgColor-default, #1f2328);
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+.fp-widget-toggle::before {
+  content: "▾";
+}
+
+.fp-widget.is-collapsed .fp-widget-toggle::before {
+  content: "▸";
+}
+
+.fp-widget[data-fp-widget="board"] {
+  --fp-widget-max: clamp(20rem, 60dvh, 40rem);
+  height: var(--fp-widget-max);
+}
+
+.fp-widget[data-fp-widget="board"] .fp-widget-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0.5rem 0.5rem 0.25rem;
+}
+
+.fp-widget[data-fp-widget="board"] .fp-board-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 0.5rem;
+}
+
+.fp-widget[data-fp-widget="board"] .fp-column {
+  flex: 0 0 15.5rem;
+  max-height: 100%;
+  min-height: 0;
+}
+
+.fp-widget[data-fp-widget="board"] .fp-column-cards {
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 0.35rem;
+  padding: 0.35rem;
+}
+
+.fp-widget[data-fp-widget="board"] .fp-column-head {
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+.fp-widget[data-fp-widget="board"] .fp-card {
+  padding: 0.35rem 0.45rem;
+  font-size: 0.8rem;
+}
+
+.fp-widget[data-fp-widget="board"] .fp-card-title {
+  font-size: 0.85rem;
+  line-height: 1.3;
+  margin: 0.15rem 0;
+}
+
+.fp-card-title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.fp-card-title a:hover,
+.fp-card-title a:focus-visible {
+  text-decoration: underline;
+}
+
+.fp-card-line .fp-card-project {
+  margin-left: auto;
+  max-width: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fgColor-muted, #59636e);
+}
+
+.fp-card-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  margin: 0.15rem 0;
+}
+
+.fp-card-labels .fp-label-chip,
+.fp-widget-chip {
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 0 0.4rem;
+  cursor: pointer;
+}
+
+.fp-card-meta time {
+  margin-left: auto;
+  color: var(--fgColor-muted, #59636e);
+  font-size: 0.72rem;
+}
+
+.fp-type,
+.fp-prio {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 4px;
+  padding: 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  background: var(--bgColor-muted, #f6f8fa);
+  color: var(--fgColor-default, #1f2328);
+}
+
+.fp-type[data-fp-type="Bug"] {
+  background: #ffebe9;
+  border-color: #ff8182;
+  color: #82071e;
+}
+
+.fp-type[data-fp-type="Phase"],
+.fp-type[data-fp-type="Welle"] {
+  background: #ddf4ff;
+  border-color: #54aeff;
+  color: #0a3069;
+}
+
+.fp-type[data-fp-type="Dach"] {
+  background: #fbefff;
+  border-color: #d8b9ff;
+  color: #512a97;
+}
+
+.fp-prio[data-fp-priority="Sofort"] {
+  background: #82071e;
+  border-color: #82071e;
+  color: #ffffff;
+}
+
+.fp-prio[data-fp-priority="Hoch"] {
+  background: #fff1e5;
+  border-color: #fb8f44;
+  color: #762c00;
+}
+
+.fp-prio[data-fp-priority="Niedrig"] {
+  font-weight: 400;
+  color: var(--fgColor-muted, #59636e);
+}
+
+.fp-badge--warn {
+  border-color: #d4a72c;
+  background: #fff8c5;
+  color: #4d2d00;
+  font-size: 0.72rem;
+}
+
+.fp-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.fp-board-bereiche {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.fp-board-bereiche .fp-chip {
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.fp-board-bereiche .fp-chip span {
+  color: var(--fgColor-muted, #59636e);
+}
+
+.fp-board-wiki,
+.fp-board-links {
+  font-size: 0.8rem;
+}
+
+.fp-board-links {
+  display: inline-flex;
+  gap: 0.6rem;
+  white-space: nowrap;
+}
+
+.fp-widget[data-fp-widget="board"] .fp-board-scroll {
+  padding-bottom: 0.25rem;
+}
+
+.fp-board-alert {
+  margin: 0 0 0.35rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid #ff8182;
+  border-radius: 6px;
+  background: #ffebe9;
+  color: #82071e;
+  font-size: 0.8rem;
+}
+
+/* Eine Zeile, waagerecht scrollbar: die Chips nehmen dem Board keine Höhe. */
+.fp-widget-chipsets {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1 1 100%;
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 0.1rem;
+  scrollbar-width: thin;
+}
+
+.fp-widget-chipset {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.fp-widget-chipset legend {
+  float: left;
+  padding: 0;
+  margin: 0.1rem 0.3rem 0 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--fgColor-muted, #59636e);
+}
+
+.fp-widget-chip {
+  position: relative;
+  margin: 0 0.2rem 0 0;
+  white-space: nowrap;
+}
+
+.fp-widget-chip input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+
+.fp-widget-chip:has(input:checked) {
+  outline: 2px solid var(--fgColor-accent, #0969da);
+  outline-offset: 1px;
+}
+
+.fp-widget-chip:has(input:focus-visible) {
+  outline: 2px dashed var(--fgColor-accent, #0969da);
+  outline-offset: 1px;
+}

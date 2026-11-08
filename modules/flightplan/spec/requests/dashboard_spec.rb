@@ -22,8 +22,9 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
     create(:list_project_custom_field, name: "Bereich", project_custom_field_section: section,
                                        possible_values: ["ADA MAIN", "Nuova AI Solutions", "NuovaGen"])
   end
-  let!(:ada) { create(:project, name: "Dash Ada", public: false) }
-  let!(:agentur) { create(:project, name: "Dash Agentur", public: false) }
+  # OP#1674: Der Bereich kommt aus der Projekt-Hierarchie; die Wurzeln tragen die Bereichs-Identifier.
+  let!(:ada) { create(:project, name: "Dash Ada", identifier: "ada-main", public: false) }
+  let!(:agentur) { create(:project, name: "Dash Agentur", identifier: "nuova-ai-solutions", public: false) }
   let!(:ohne) { create(:project, name: "Dash Ohne", public: false) }
   let(:admin) { create(:admin, language: "de") }
   let!(:neu) { ensure_status("Neu") }
@@ -76,7 +77,8 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
       expect(ada_table).to include("Wartet Eins", "Start Drei", "Cora Agent")
       expect(ada_table).not_to include("Frisch Fuenf", "Ruhig Sechs", "Fertig Sieben")
       expect(agentur_table).to include("Frage Zwei", "Alt Vier", "offene Rückfrage", "ohne Änderung")
-      expect(ada_table).not_to include("fp-dash-reason")
+      # OP#1674: Startfreigabe ohne Ausführungsweg und ohne Agent-Label trägt den Grund „Weg fehlt“, sonst kein Grund.
+      expect(ada_table.scan(/data-reason="([a-z_]+)"/).flatten).to eq(["no_path"])
       expect(response.body).to include('data-bereich-table="Ohne Bereich"')
       expect(response.body).not_to include('data-bereich-table="NuovaGen"')
     end
@@ -96,8 +98,9 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
 
     it "filters by Bereich" do
       get "/flightplan/dashboard", params: { bereich: "nuova-ai-solutions" }
-      expect(response.body).to include("Frage Zwei")
-      expect(response.body).not_to include("Wartet Eins")
+      attention = response.body[/id="fp-widget-attention".*?<\/section>/m]
+      expect(attention).to include("Frage Zwei")
+      expect(attention).not_to include("Wartet Eins")
       get "/flightplan/dashboard", params: { bereich: "nuovagen" }
       expect(response).to have_http_status(:ok)
       expect(response.body).to include("fp-dash-empty")
@@ -143,12 +146,12 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
       expect(tile).to match(%r{data-stat="blocked".*?>1</a>}m)
       expect(tile).to match(%r{data-stat="questions".*?>0</a>}m)
       expect(tile).to match(%r{data-stat="agents".*?nicht aktiv}m)
-      expect(tile).to include('href="/flightplan/board?bereich=ada-main"')
+      expect(tile).to include('href="/flightplan/dashboard?board%5Bbereich%5D=ada-main#fp-widget-board"')
       expect(tile).to include('href="/flightplan/dashboard?bereich=ada-main#fp-dash-attention-title"')
       other = response.body[/data-bereich-tile="Nuova AI Solutions">.*?<\/article>/m]
       expect(other).to match(%r{data-stat="questions".*?>1</a>}m)
       expect(other).to include("/flightplan/dashboard?rueckfragen=bereich%3ANuova+AI+Solutions")
-      expect(response.body[/data-bereich-tile="Ohne Bereich">.*?<\/article>/m]).not_to include("bereich=")
+      expect(response.body[/data-bereich-tile="Ohne Bereich">.*?<\/article>/m]).not_to include("?bereich=", "&amp;bereich=")
     end
 
     it "counts the age from the last status change, not from updated_at" do
@@ -164,7 +167,8 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
       get "/flightplan/dashboard"
       Rails.cache.clear
       queries = []
-      callback = ->(*, payload) { queries << payload[:sql] if payload[:sql].include?("LAG(") }
+      # Nur die Statushistorie der Aufmerksamkeit (previous_status_id); das Board-Widget (OP#1674) fragt „Fertig“ eigens ab.
+      callback = ->(*, payload) { queries << payload[:sql] if payload[:sql].include?("LAG(") && payload[:sql].include?("previous_status_id") }
       ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { get "/flightplan/dashboard" }
       expect(queries.size).to eq(1)
     end
@@ -313,7 +317,7 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
     end
 
     it "adds the menu entry ADA Dashboard" do
-      get "/flightplan/board"
+      get "/flightplan/work_packages/#{plain_wp.id}"
       expect(response.body).to include("ADA Dashboard")
       expect(response.body).to include('data-name="flightplan_dashboard"', "/flightplan/dashboard\"")
     end
@@ -334,9 +338,9 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
       expect(response).to have_http_status(:forbidden)
       get "/flightplan/approvals"
       expect(response).to have_http_status(:forbidden)
-      get "/flightplan/board"
-      expect(response.body).to include('data-name="flightplan"')
-      expect(response.body).not_to include('data-name="flightplan_dashboard"')
+      get "/flightplan/work_packages/#{plain_wp.id}"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).not_to include('data-name="flightplan"', 'data-name="flightplan_dashboard"')
     end
   end
 
