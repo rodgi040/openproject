@@ -124,6 +124,24 @@ RSpec.describe "Flightplan workplace", :skip_csrf,
         expect(response.body).not_to include("data-fp-chat-admin-only")
         expect(response.body[/<div class="fp-chat-offline"[^>]*>/]).to include("hidden")
       end
+
+      it "keeps the workplace a direct child of #content-body, which the OP#1669 height rule selects" do
+        get "/flightplan/work_packages/#{package.id}"
+        page = Nokogiri::HTML(response.body)
+        expect(page.at_css("#content-body > #fp-workplace")).to be_present
+        expect(page.at_css("#fp-workplace > .fp-workplace-chat > iframe[data-fp-workplace-frame]")).to be_present
+      end
+    end
+
+    it "serves a stylesheet that keeps the chat inside the visible area at every zoom level (OP#1669)" do
+      get "/flightplan/assets/flightplan.css"
+      expect(response).to have_http_status(:ok)
+      css = response.body
+      expect(css).to include("#content-body:has(> #fp-workplace)", "grid-template-rows: minmax(0, 1fr)",
+                             "--fp-workplace-fit: calc(100dvh - var(--header-height, 55px) - 1.5rem)")
+      workplace_rules = css.scan(/\.fp-workplace(?:-chat|-frame)?\s*\{[^}]*\}/).join("\n")
+      expect(workplace_rules).not_to match(/min-height:\s*(32rem|calc\(100vh)/)
+      expect(workplace_rules).to include("height: var(--fp-workplace-fit)")
     end
   end
 
