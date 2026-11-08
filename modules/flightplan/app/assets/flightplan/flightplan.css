@@ -216,26 +216,40 @@
   border-bottom-color: transparent;
 }
 
+/* OP#1669: The workplace fills exactly the rest of #content-body (OpenProject gives it the viewport height minus the top
+   bar), at every zoom level. Info column and chat scroll on their own; the chat is never taller than the visible area
+   (--fp-workplace-fit), so header, history and input of the chat stay visible together. */
+#content-body:has(> #fp-workplace) {
+  display: flex;
+  flex-direction: column;
+}
+
 .fp-workplace {
+  --fp-workplace-fit: calc(100dvh - var(--header-height, 55px) - 1.5rem);
   display: grid;
   grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 0.75rem;
-  min-height: calc(100vh - 12rem);
+  flex: 1 1 0;
+  min-height: min(24rem, var(--fp-workplace-fit));
 }
 
 .fp-workplace-info {
   overflow: auto;
+  min-height: 0;
 }
 
 .fp-workplace-chat {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  min-height: 32rem;
+  min-height: 0;
 }
 
 .fp-workplace-frame {
+  flex: 1 1 auto;
   width: 100%;
-  height: 100%;
-  min-height: 32rem;
+  min-height: 0;
   border: 1px solid var(--borderColor-default, #d0d7de);
   border-radius: 8px;
 }
@@ -284,8 +298,21 @@
 }
 
 @media (max-width: 800px) {
+  /* OP#1669: One column. The chat comes first, its frame exactly as high as the visible area; the info column follows. */
   .fp-workplace {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+
+  .fp-workplace-chat {
+    order: -1;
+  }
+
+  .fp-workplace-frame {
+    flex: 0 0 auto;
+    height: var(--fp-workplace-fit);
   }
 }
 
