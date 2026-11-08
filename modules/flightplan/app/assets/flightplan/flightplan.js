@@ -58,37 +58,6 @@
     event.stopPropagation();
     window.location.assign(href);
   }, true);
-
-  var cards = Array.prototype.slice.call(document.querySelectorAll("[data-fp-card]"));
-  if (!cards.length) return;
-  var index = 0;
-  var hash = (window.location.hash || "").replace("#q-", "");
-  cards.forEach(function (card, position) {
-    if (card.getAttribute("data-fp-card") === hash) index = position;
-  });
-
-  function show(next) {
-    index = (next + cards.length) % cards.length;
-    cards.forEach(function (card, position) {
-      card.classList.toggle("fp-card-current", position === index);
-    });
-    cards[index].scrollIntoView({ block: "nearest" });
-  }
-
-  show(index);
-  document.addEventListener("keydown", function (event) {
-    var tag = (event.target.tagName || "").toLowerCase();
-    var typing = tag === "textarea" || tag === "input" || tag === "select";
-    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-      var form = cards[index].querySelector("form");
-      if (form) form.requestSubmit();
-      event.preventDefault();
-      return;
-    }
-    if (typing) return;
-    if (event.key === "j") { show(index + 1); event.preventDefault(); }
-    if (event.key === "k") { show(index - 1); event.preventDefault(); }
-  });
 })();
 
 (function () {
@@ -313,7 +282,7 @@
 function fpMountChat(root, frame) {
   var origin = "http://localhost:8092";
   var contextNode = document.getElementById("fp-workplace-context");
-  var questionsNode = document.getElementById("fp-workplace-questions");
+  var questionsNode = root.querySelector("[data-fp-chat-questions]") || document.getElementById("fp-workplace-questions");
   var wp = {};
   var questions = [];
   try {
@@ -414,8 +383,14 @@ function fpMountChat(root, frame) {
         if (!response.ok || !payload.ok) return;
         questions = payload.items || [];
         sendState();
+        fpMarkAnswered(data.id);
       });
     }).catch(function () {});
+  });
+
+  window.addEventListener("fp:questions-changed", function (event) {
+    questions = (event.detail && event.detail.items) || [];
+    sendState();
   });
 }
 
@@ -589,4 +564,77 @@ function fpWidgetFilters(widget) {
 
 (function () {
   document.querySelectorAll("[data-fp-widget]").forEach(fpWidgetFilters);
+})();
+
+// OP#1673: Antwort im Widget „Rückfragen“ ohne Neuladen. Ohne Skript schickt das Formular normal ab und die Seite kommt
+// zurück. Nach der Antwort bekommt der Chat die neue Liste (fp:questions).
+function fpMarkAnswered(id) {
+  document.querySelectorAll("[data-fp-question='" + String(id).replace(/\D/g, "") + "']").forEach(function (item) {
+    item.classList.add("is-answered");
+    var form = item.querySelector("form[data-fp-question-form]");
+    if (form) form.remove();
+    var note = item.querySelector("[data-fp-question-note]");
+    if (note) {
+      note.classList.remove("is-error");
+      note.textContent = item.getAttribute("data-fp-answered-text") || "";
+      note.hidden = false;
+    }
+  });
+}
+
+(function () {
+  var widget = document.querySelector("[data-fp-widget='questions']");
+  if (!widget) return;
+  // Erst nach dem Laden der Stylesheets: vorher ist .fp-home-main noch kein Scrollbereich.
+  if (!window.location.hash && /[?&]rueckfragen=/.test(window.location.search)) {
+    var reveal = function () { widget.scrollIntoView({ block: "start" }); };
+    if (document.readyState === "complete") reveal();
+    else window.addEventListener("load", reveal);
+  }
+  if (typeof fetch !== "function" || typeof FormData !== "function") return;
+
+  widget.addEventListener("keydown", function (event) {
+    if (event.key !== "Enter" || !(event.ctrlKey || event.metaKey)) return;
+    var form = event.target.closest && event.target.closest("form[data-fp-question-form]");
+    if (!form) return;
+    event.preventDefault();
+    form.requestSubmit(form.querySelector(".fp-q-send"));
+  });
+
+  widget.addEventListener("submit", function (event) {
+    var form = event.target.closest && event.target.closest("form[data-fp-question-form]");
+    if (!form) return;
+    event.preventDefault();
+    var item = form.closest("[data-fp-question]");
+    var note = item && item.querySelector("[data-fp-question-note]");
+    var body = new FormData(form);
+    var submitter = event.submitter;
+    if (submitter && submitter.name) body.set(submitter.name, submitter.value);
+    var buttons = form.querySelectorAll("button");
+    buttons.forEach(function (button) { button.disabled = true; });
+    if (note) {
+      note.classList.remove("is-error");
+      note.textContent = item.getAttribute("data-fp-sending-text") || "";
+      note.hidden = false;
+    }
+    var token = form.querySelector("input[name='authenticity_token']");
+    fetch(form.action, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Accept": "application/json", "X-CSRF-Token": token ? token.value : "" },
+      body: body
+    }).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (payload) {
+        if (!response.ok || !payload.ok) throw { fpMessage: payload.error };
+        fpMarkAnswered(form.getAttribute("data-fp-question-form"));
+        window.dispatchEvent(new CustomEvent("fp:questions-changed", { detail: { items: payload.items || [] } }));
+      });
+    }).catch(function (error) {
+      buttons.forEach(function (button) { button.disabled = false; });
+      if (!note) return;
+      note.textContent = (error && error.fpMessage) || item.getAttribute("data-fp-failed-text") || "";
+      note.classList.add("is-error");
+      note.hidden = false;
+    });
+  });
 })();

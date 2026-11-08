@@ -15,6 +15,10 @@ module Flightplan
     def index
       @dashboard = Flightplan::Dashboard.load(user: User.current, params: params.permit(:bereich))
       @approval_state = Flightplan::Approvals.availability(User.current)
+      @questions_widget = Flightplan::QuestionsWidget.load(
+        user: User.current, params: params.permit(Flightplan::QuestionsWidget::PARAM),
+        tree: @dashboard.project_tree, status_order: @dashboard.status_order
+      )
     end
   end
 end

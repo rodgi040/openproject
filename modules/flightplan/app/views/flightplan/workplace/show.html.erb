@@ -144,7 +144,7 @@
     <% else %>
       <ul>
         <% @place.questions.each do |question| %>
-          <li><%= link_to question.question, "/flightplan/questions#q-#{question.id}", data: { turbo: false } %></li>
+          <li><%= link_to question.question, "/#q-#{question.id}", data: { turbo: false } %></li>
         <% end %>
       </ul>
     <% end %>

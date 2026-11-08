@@ -57,7 +57,7 @@ module Flightplan
       end
 
       def notify(record)
-        note = "Rückfrage:\n#{record.question}\n\nInbox: /flightplan/questions#q-#{record.id}"
+        note = "Rückfrage:\n#{record.question}\n\nInbox: /#q-#{record.id}"
         result = AddWorkPackageNoteService
           .new(user: @user, work_package: @work_package)
           .call(note, send_notifications: false)

@@ -5,8 +5,8 @@ module Flightplan
   # gefiltert wird im Browser (flightplan.js, fpWidgetFilters). Ein Eintrag ist ein Hash mit :bereich, :path
   # (Projekt-Identifier, eigener zuerst, dann die Vorfahren), :statuses und :labels.
   class WidgetFilters
-    ORDER = %w[overview attention running betrieb].freeze
-    WIDE = %w[overview attention].freeze
+    ORDER = %w[overview attention questions running betrieb].freeze
+    WIDE = %w[overview attention questions].freeze
 
     attr_reader :entries
 

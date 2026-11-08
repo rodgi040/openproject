@@ -105,7 +105,7 @@ RSpec.describe "Flightplan dashboard widgets", :skip_csrf, type: :rails_request 
         get path
         expect(response).to have_http_status(:ok)
         keys = page.css("#fp-home .fp-home-main .fp-widgets > .fp-widget").map { |node| node["data-fp-widget"] }
-        expect(keys).to eq(%w[overview attention running betrieb])
+        expect(keys).to eq(%w[overview attention questions running betrieb])
         expect(page.at_css("#content-body > #fp-home")).to be_present
       end
     end
@@ -231,10 +231,11 @@ RSpec.describe "Flightplan dashboard widgets", :skip_csrf, type: :rails_request 
 
     current_user { member }
 
-    it "renders no widgets" do
+    # OP#1673: nur das Rückfragen-Widget, hier ohne Einträge (keine sichtbaren Arbeitspakete).
+    it "renders no dashboard widget besides the questions" do
       get "/"
       expect(response).to have_http_status(:ok)
-      expect(page.at_css(".fp-widgets")).to be_nil
+      expect(page.css(".fp-widgets > .fp-widget").map { |node| node["data-fp-widget"] }).to eq(%w[questions])
       expect(response.body).not_to include("data-fp-item")
     end
   end

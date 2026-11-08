@@ -562,6 +562,10 @@
   --fp-widget-max: clamp(16rem, 52dvh, 30rem);
 }
 
+.fp-widget[data-fp-widget="questions"] {
+  --fp-widget-max: clamp(16rem, 52dvh, 30rem);
+}
+
 .fp-widget-head {
   display: flex;
   align-items: baseline;
@@ -830,4 +834,156 @@ a[href*="/enterprise_plans"] {
 a.op-menu--item-action[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addons,
 a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addons {
   display: none !important;
+}
+
+/* OP#1673: Rückfragen im Dashboard. Eine Karte je Frage: Kopfzeile (Projekt, Ticket, Status, Agent, Alter), Frage,
+   aufklappbarer Kontext, Antwort mit Options-Knöpfen und Freitext. */
+.fp-q {
+  padding: 0.45rem 0.55rem;
+  margin: 0 0 0.45rem;
+  border: 1px solid var(--borderColor-muted, #d8dee4);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.fp-q:target {
+  outline: 2px solid var(--fgColor-accent, #0969da);
+  outline-offset: 1px;
+}
+
+.fp-q.is-answered {
+  opacity: 0.7;
+}
+
+.fp-q-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.45rem;
+}
+
+.fp-q-project {
+  color: var(--fgColor-muted, #59636e);
+}
+
+.fp-q-id {
+  font-variant-numeric: tabular-nums;
+}
+
+.fp-q-subject {
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fp-q-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.45rem;
+  margin-left: auto;
+  color: var(--fgColor-muted, #59636e);
+  font-size: 0.8rem;
+}
+
+.fp-q-age {
+  white-space: nowrap;
+}
+
+.fp-q-text {
+  margin: 0.3rem 0 0.15rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.fp-q-context {
+  margin: 0 0 0.15rem;
+  color: var(--fgColor-muted, #59636e);
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.fp-q-more {
+  margin: 0.15rem 0;
+}
+
+.fp-q-more > summary {
+  cursor: pointer;
+  color: var(--fgColor-muted, #59636e);
+  font-size: 0.8rem;
+}
+
+.fp-q-more ul {
+  margin: 0.2rem 0;
+  padding-left: 1.1rem;
+}
+
+.fp-q-more p {
+  margin: 0.1rem 0;
+  overflow-wrap: anywhere;
+}
+
+.fp-q-comments-title {
+  font-weight: 600;
+}
+
+.fp-q-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.35rem;
+  margin-top: 0.3rem;
+}
+
+.fp-q-input {
+  flex: 1 1 14rem;
+  min-width: 0;
+  min-height: 2.2rem;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.45rem;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: 6px;
+  resize: vertical;
+}
+
+.fp-q-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.fp-q-option,
+.fp-q-send {
+  font: inherit;
+  font-size: 0.8rem;
+  min-height: 1.9rem;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: 6px;
+  background: var(--bgColor-muted, #f6f8fa);
+  color: var(--fgColor-default, #1f2328);
+  cursor: pointer;
+}
+
+.fp-q-option {
+  border-color: var(--fgColor-accent, #0969da);
+  color: var(--fgColor-accent, #0969da);
+  background: var(--bgColor-default, #ffffff);
+}
+
+.fp-q-option:disabled,
+.fp-q-send:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.fp-q-note {
+  margin: 0.25rem 0 0;
+  color: var(--fgColor-success, #1a7f37);
+}
+
+.fp-q-note.is-error {
+  color: var(--fgColor-danger, #d1242f);
 }

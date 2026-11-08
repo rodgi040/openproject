@@ -20,6 +20,16 @@ de:
       submit: Antworten
       answered: Beantwortet.
       answer_by: Antwort von %{user}
+      widget:
+        title: Rückfragen
+        hint: "Offene Rückfragen der Agents, älteste zuerst. Eine Option schickt die Antwort sofort ab, der Freitext geht mit."
+        details: Kontext
+        free_text_optional: Freitext (optional)
+        free_text_for: "Antwort auf: %{question}"
+        send_text: Nur Freitext senden
+        answered: Beantwortet.
+        sending: Wird gesendet …
+        failed: Antwort fehlgeschlagen.
     board:
       title: Flightplan
       projects: Projekte
@@ -86,7 +96,7 @@ de:
       chat: "Chat (T3 Code, Gandalf)"
       chat_admin_only: "Der Chat (T3 Code) steht nur Administratoren zur Verfügung. Fragen zu einem Ticket stellen Sie als Kommentar am Ticket."
       dashboard_admin_only: "Das ADA Dashboard sehen nur Administratoren."
-      dashboard_links_html: "Ihre Arbeit finden Sie im %{board} und unter %{questions}."
+      dashboard_links_html: "Ihre Arbeit finden Sie im %{board}. Offene Rückfragen stehen unten."
       board: Board
     widgets:
       search: Suchen …

@@ -35,7 +35,7 @@
         <span><%= choice[:open_count] %></span>
       <% end %>
     <% end %>
-    <%= link_to t("flightplan.board.inbox"), flightplan_questions_path(projects: @board.selected_projects.join(",").presence), class: "fp-chip", data: { turbo: false } %>
+    <%= link_to t("flightplan.board.inbox"), root_path(Flightplan::QuestionsWidget::PARAM => Flightplan::QuestionsWidget.scope_for(identifiers: @board.selected_projects)), class: "fp-chip", data: { turbo: false } %>
   </nav>
 
   <%= form_with url: flightplan_board_path, method: :get, local: true, class: "fp-search", data: { turbo: false } do %>
@@ -166,7 +166,7 @@
                 <% end %>
                 <% if card.question_count.positive? %>
                   <%= link_to t("flightplan.board.open_questions", count: card.question_count),
-                        "/flightplan/questions#q-#{card.question_id}",
+                        "/#q-#{card.question_id}",
                         class: "fp-badge",
                         data: { turbo: false } %>
                 <% end %>
