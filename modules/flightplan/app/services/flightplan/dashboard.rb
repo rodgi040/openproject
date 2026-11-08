@@ -11,15 +11,14 @@ module Flightplan
     STATUS_START = "Startfreigabe"
     STATUS_PROGRESS = "In Arbeit"
     NO_BEREICH = "Ohne Bereich"
-    BEREICH_FIELD = "Bereich"
     BEREICHE = {
       "ada-main" => "ADA MAIN",
       "nuova-ai-solutions" => "Nuova AI Solutions",
       "nuovagen" => "NuovaGen"
     }.freeze
     # Gründe, die in der Statusspalte als eigener Hinweis erscheinen. "Wartet auf Mensch" und "Startfreigabe"
-    # sagt schon der Status selbst.
-    REASONS = %i[question stale start_failed].freeze
+    # sagt schon der Status selbst. no_path (OP#1674): Startfreigabe ohne Ausführungsweg und ohne Agent-Label.
+    REASONS = %i[question stale start_failed no_path].freeze
     FAILED_START_DAYS = 14
     # Marker des Pollers (op_poller: <!-- fp-op-alarm:start:N -->) und Rückfall-Kommentar von ada-dispatch.
     FAILED_START_NOTES = ["%fp-op-alarm:start:%", "%ada-dispatch: Start fehlgeschlagen%"].freeze
@@ -27,6 +26,7 @@ module Flightplan
     APPROVABLE_STATUSES = ["Geplant", STATUS_WAITING].freeze
     MASTER_FIELD = "Master"
     LABELS_FIELD = "Labels"
+    PATH_FIELD = "Ausführungsweg"
     STATUS_IDS_CACHE_SECONDS = 300
     STATUS_IDS_CACHE_KEY = "flightplan-dashboard-status-ids"
     REQUIRED_STATUSES = [STATUS_WAITING, STATUS_START, STATUS_PROGRESS, *APPROVABLE_STATUSES].uniq.freeze
@@ -34,7 +34,7 @@ module Flightplan
     # siehe openproject/orchestrator/README.md). Notizen anderer Autoren lösen keinen Alarm aus.
     FAILED_START_AUTHORS = %w[dispatcher].freeze
     # Version im Cache-Schlüssel: Ändert sich die Form der gecachten Daten, liest kein Prozess alte Einträge.
-    CACHE_VERSION = 2
+    CACHE_VERSION = 3
 
     def self.cache_key(user_id)
       ["flightplan-dashboard", CACHE_VERSION, user_id]
@@ -206,15 +206,10 @@ module Flightplan
       @project_paths ||= tree_order.to_h { |entry| [entry[:id], entry[:path]] }
     end
 
+    # OP#1674: aus der Projekt-Hierarchie (Flightplan::Bereich), wie das Board.
     def project_bereiche
-      field = ProjectCustomField.find_by(name: BEREICH_FIELD)
-      labels = {}
-      if field
-        options = field.custom_options.pluck(:id, :value).to_h { |id, value| [id.to_s, value] }
-        CustomValue.where(customized_type: "Project", custom_field_id: field.id, customized_id: projects_by_id.keys)
-          .pluck(:customized_id, :value).each { |project_id, value| labels[project_id] = options[value.to_s] }
-      end
-      projects_by_id.keys.to_h { |id| [id, BEREICHE.value?(labels[id]) ? labels[id] : NO_BEREICH] }
+      all = Flightplan::Bereich.by_project_id
+      projects_by_id.keys.to_h { |id| [id, all[id] || NO_BEREICH] }
     end
 
     def attention_rows(bereiche)
@@ -241,6 +236,7 @@ module Flightplan
         changed:,
         failed: failed_starts(waiting_ids.to_h { |row| [row[0], changed[row[0]] || row[5]] }),
         masters: masters(wp_ids),
+        paths: execution_paths(found.filter_map { |row| row[0] if row[3] == ids[STATUS_START] }),
         ids:
       }
       found.filter_map do |id, subject, project_id, status_id, assignee_id, updated_at, lock_version|
@@ -273,6 +269,9 @@ module Flightplan
       if context[:failed].key?(wp[:id])
         reasons << :start_failed
         stamps << since_status
+      end
+      if LabelFamilies.path_missing?(status:, path: context[:paths][wp[:id]], labels: context[:labels][wp[:id]] || [])
+        reasons << :no_path
       end
       since = stamps.min || since_status
       approvable = APPROVABLE_STATUSES.include?(status) && context[:masters][wp[:id]] == "op"
@@ -336,6 +335,16 @@ module Flightplan
       options = field.custom_options.pluck(:id, :value).to_h { |id, value| [id.to_s, value] }
       CustomValue.where(customized_type: "WorkPackage", custom_field_id: field.id, customized_id: wp_ids)
         .pluck(:customized_id, :value).to_h { |id, value| [id, options[value.to_s]] }
+    end
+
+    # Feld "Ausführungsweg" je Arbeitspaket, eine Abfrage.
+    def execution_paths(wp_ids)
+      field = WorkPackageCustomField.find_by(name: PATH_FIELD)
+      return {} if field.nil? || wp_ids.empty?
+
+      options = field.custom_options.pluck(:id, :value).to_h { |id, value| [id.to_s, value] }
+      CustomValue.where(customized_type: "WorkPackage", custom_field_id: field.id, customized_id: wp_ids)
+        .where.not(value: [nil, ""]).pluck(:customized_id, :value).to_h { |id, value| [id, options[value.to_s]] }
     end
 
     def labels_field

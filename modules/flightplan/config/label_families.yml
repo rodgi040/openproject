@@ -1,0 +1,61 @@
+# OP#1674: Zuordnung Label -> Familie für Board und Dashboard-Filter (Familien nach FP-Concil OP#1670, Abschnitt 2).
+# Wird später aus openproject/config/labels.yml der Factory erzeugt (OP#1670 Schritt 4); bis dahin von Hand gepflegt.
+# Gelesen nur von Flightplan::LabelFamilies. Die Reihenfolge der Familien ist die Reihenfolge der Gruppen im Filter.
+#
+#   filter: false  -> die Familie erscheint nicht als Chip im Filter (Status, Warten und Art sind Spalte bzw. Typ)
+#   card: false    -> die Familie erscheint nicht als Chip auf der Karte (Daten bleiben am Ticket)
+#   names          -> genaue Namen
+#   prefixes       -> Namen mit diesem Anfang
+#   types          -> Label wiederholt den OP-Typ: auf einer Karte dieses Typs kein Chip
+# Ein Name ohne Eintrag gehört zu "default".
+version: 1
+default: projekt
+families:
+  - key: status
+    title: Status
+    filter: false
+    card: false
+    names: [needs-triage, geplant, ready-for-agent, ready-for-agent-claude, ready-for-agent-codex, ready-for-human, wontfix]
+  - key: warten
+    title: Warten
+    filter: false
+    card: false
+    names: [blocked-on-human, question, blocked-on-human-claude, blocked-on-human-codex, needs-info]
+  - key: art
+    title: Art
+    filter: false
+    names: [bug, enhancement, idea]
+  - key: plan-typ
+    title: Plan-Typ
+    prefixes: ["fp:"]
+  - key: wayfinder
+    title: Wayfinder
+    prefixes: ["wayfinder:"]
+  - key: agent
+    title: Agent
+    names: [claude, codex]
+  - key: prioritaet
+    title: Priorität
+    names: [P0, P1, P2, P0-blocker, P1-defekt, P2-inhalt, P3-assets, P4-danach, blocker]
+    prefixes: ["prio:", "severity:"]
+  - key: thema
+    title: Thema
+    names: [documentation, security, accessibility, betrieb, repo]
+    prefixes: ["thema:"]
+  - key: projekt
+    title: Projekt-spezifisch
+    names: [awaiting-go, release, user-report, milestone-3]
+    prefixes: ["agent:", "go:", "release:", "plat:", "bugbot:"]
+  - key: altlast
+    title: Altlast
+    names: [wayfinder, entscheidung, research, aufgabe, epic, fp-auto, audit-2026-08, audit-2026-08-27, review-2026-09-02,
+            blocked, blockiert, duplicate, good first issue, help wanted, invalid]
+types:
+  bug: Bug
+  enhancement: Aufgabe
+  "fp:phase": Phase
+  "fp:wave": Welle
+# Agent-Label für „Weg fehlt“ (OP#1670 D3): genaue Namen oder Endung.
+agent_labels:
+  names: [claude, codex]
+  suffixes: ["-claude", "-codex"]

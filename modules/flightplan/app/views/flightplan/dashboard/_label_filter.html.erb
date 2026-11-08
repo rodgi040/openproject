@@ -1,4 +1,19 @@
-<%# OP#1672: Label-Filter als Mehrfachauswahl. Je Gruppe ein Fieldset; Kategorien (OP#1670) liefert WidgetFilters.label_groups. %>
+<%# OP#1672: Label-Filter als Mehrfachauswahl. Je Gruppe (Label-Familie, OP#1674) ein Fieldset mit Überschrift.
+    style "chips" (Board): die Gruppen stehen offen in der Filterleiste, jedes Label ist ein Chip mit Checkbox. %>
+<% chips = local_assigns[:style] == "chips" %>
+<% if chips %>
+  <div class="fp-widget-chipsets" data-fp-filter="labels" role="group" aria-label="<%= t("flightplan.widgets.labels") %>">
+    <% groups.each do |group| %>
+      <fieldset class="fp-widget-chipset" data-fp-label-group="<%= group[:key] %>">
+        <legend><%= group[:title] %></legend>
+        <% Array(group[:labels] || group[:names].map { |name| { name: } }).each do |label| %>
+          <label class="fp-label-chip fp-widget-chip"<% if label[:color] %> style="background-color:#<%= label[:color] %>;color:#<%= label[:ink] %>"<% end %>><input type="checkbox" value="<%= label[:name] %>"<%= " checked" if label[:selected] %>><span><%= label[:name] %></span></label>
+        <% end %>
+      </fieldset>
+    <% end %>
+    <span class="fp-widget-labels-count" data-fp-labels-count></span>
+  </div>
+<% else %>
 <details class="fp-widget-labels" data-fp-filter="labels">
   <summary><%= t("flightplan.widgets.labels") %> <span class="fp-widget-labels-count" data-fp-labels-count></span></summary>
   <div class="fp-widget-labels-pop">
@@ -12,3 +27,4 @@
     <% end %>
   </div>
 </details>
+<% end %>

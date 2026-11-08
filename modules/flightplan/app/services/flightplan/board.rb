@@ -1,12 +1,16 @@
 # frozen_string_literal: true
 
 module Flightplan
-  # One visible-scope read, then bulk lookups for the cards actually shown.
+  # One visible-scope read, then bulk lookups for the cards actually shown. OP#1674: rendered as the board widget of the
+  # ADA dashboard; the old page /flightplan/board redirects there.
   class Board
     PAGE = 200
     DONE_WINDOW = 14
+    HUMAN_LABEL = "ready-for-human"
+    # "human" (OP#1670 D2): Neu mit ready-for-human. Kein Ablageziel, die Spalte folgt dem Label, nicht dem Status.
     COLUMNS = [
       { key: "triage", status: "Neu" },
+      { key: "human", status: "Neu", drop: false },
       { key: "question", status: "Wartet auf Mensch" },
       { key: "for_you", status: "Geplant" },
       { key: "agent_ready", status: "Startfreigabe" },
@@ -15,7 +19,8 @@ module Flightplan
       { key: "done", status: "Fertig" },
       { key: "rejected", status: "Abgelehnt" }
     ].freeze
-    STATUS_NAMES = COLUMNS.map { |column| column[:status] }.freeze
+    STATUS_NAMES = COLUMNS.map { |column| column[:status] }.uniq.freeze
+    CLOSED_COLUMNS = %w[done rejected].freeze
     GROUP_NAMES = {
       "Agenten Coding" => "Coding",
       "Agenten ADA" => "ADA"
@@ -27,9 +32,28 @@ module Flightplan
       :id, :subject, :project_identifier, :project_name, :updated_at, :lock_version,
       :labels, :assignee, :involved, :pause, :execution_path, :children,
       :question_count, :question_id, :show_children,
+      :type_name, :priority, :status_name, :bereich, :path_missing,
       keyword_init: true
-    )
-    Person = Struct.new(:id, :name, :initials, :group, keyword_init: true)
+    ) do
+      def label_names
+        labels.map { |label| label[:name] }
+      end
+
+      def chip_labels
+        shown = LabelFamilies.card_labels(label_names, type_name)
+        labels.select { |label| shown.include?(label[:name]) }
+      end
+
+      def filter_labels
+        label_names.select { |name| LabelFamilies.filter?(name) }
+      end
+
+      def agent_tokens
+        [assignee, *involved].compact.flat_map { |person| [person.login, person.group&.downcase] }.compact.uniq
+      end
+    end
+    Person = Struct.new(:id, :login, :name, :initials, :group, keyword_init: true)
+    Priority = Struct.new(:id, :name, :position, :normal, keyword_init: true)
 
     def self.load(user:, params:)
       new(user, params).load
@@ -73,31 +97,19 @@ module Flightplan
 
     attr_reader :columns
 
-    def projects
-      @projects ||= begin
-        rows = self.class.project_choices(@user)
-        if (under = bereich_identifiers)
-          rows = rows.select { |choice| under.include?(choice[:identifier]) }
-        end
-        rows.map { |choice| choice.merge(selected: selected_projects.include?(choice[:identifier])) }
-      end
-    end
-
+    # Offene Pakete je Bereich (Hierarchie, Flightplan::Bereich), dieselbe Zählung wie die Übersicht des Dashboards:
+    # alle sichtbaren offenen Pakete, unabhängig vom Filter des Boards.
     def bereiche
       @bereiche ||= begin
-        counts = self.class.project_choices(@user).index_by { |row| row[:identifier] }
-        grouped = {}
-        Project.visible(@user).order(:lft).each do |project|
-          roof = roof_for(project)
-          bucket = grouped[roof.identifier] ||= {
-            identifier: roof.identifier,
-            name: roof.name,
-            open_count: 0,
-            selected: roof.identifier == selected_bereich
-          }
-          bucket[:open_count] += counts.dig(project.identifier, :open_count).to_i
+        counts = self.class.project_choices(@user).to_h { |row| [row[:identifier], row[:open_count]] }
+        sums = Hash.new(0)
+        visible_projects.each { |id, identifier| sums[bereich_of[id]] += counts[identifier].to_i }
+        Bereich.labels.filter_map do |label|
+          next unless visible_projects.any? { |id, _| bereich_of[id] == label }
+
+          key = Bereich.key_for(label)
+          { key:, name: label, open_count: sums[label], selected: key == selected_bereich }
         end
-        grouped.values.sort_by { |row| row[:name].downcase }
       end
     end
 
@@ -105,8 +117,12 @@ module Flightplan
       @selected_bereich ||= @raw["bereich"].to_s.strip.presence
     end
 
-    def all_open_count
-      projects.sum { |choice| choice[:open_count] }
+    def total_count
+      columns.sum(&:count)
+    end
+
+    def preset?
+      query.except("limits").any?
     end
 
     def selected_projects
@@ -133,13 +149,21 @@ module Flightplan
       @raw["done"] == "all"
     end
 
-    def label_options
-      return [] unless labels_field
-
-      labels_field.custom_options.order(:value).pluck(:value).map do |name|
-        color = color_hex(self.class.colors[name])
-        { name:, color:, ink: ink_for(color), selected: selected_labels.include?(name) }
+    # Label-Chips nach Familie (Flightplan::LabelFamilies), nur Werte mit mindestens einem offenen Paket im aktuellen
+    # Filter (Projekt, Bereich, Suche, Agent; ohne den Label-Filter selbst), ohne Status-, Warte- und Art-Familie.
+    def label_groups
+      @label_groups ||= begin
+        names = labels_field ? open_label_names : []
+        names |= selected_labels
+        LabelFamilies.groups(names).map do |group|
+          group.merge(labels: group[:names].map { |name| label_chip(name) })
+        end
       end
+    end
+
+    def label_chip(name)
+      color = color_hex(self.class.colors[name])
+      { name:, color:, ink: ink_for(color), selected: selected_labels.include?(name) }
     end
 
     def agent_options
@@ -151,18 +175,31 @@ module Flightplan
       (groups + people).map { |option| option.merge(selected: selected_agents.include?(option[:key])) }
     end
 
-    def wiki_projects
-      chosen = selected_projects
-      rows = chosen.empty? ? projects : projects.select { |choice| chosen.include?(choice[:identifier]) }
-      found = Project.visible(@user).where(identifier: rows.map { |row| row[:identifier] }).includes(:wiki).index_by(&:identifier)
-      helpers = Rails.application.routes.url_helpers
-      rows.filter_map do |choice|
-        project = found[choice[:identifier]]
-        next unless project
-
-        slug = project.wiki&.start_page.presence || "wiki"
-        { name: choice[:name], href: helpers.project_wiki_path(project, slug) }
+    # identifier => { label:, href: } für Projekte mit aktivem Wiki-Modul, deren Wiki der Nutzer lesen darf. Gezeigt wird
+    # höchstens ein Link, und nur wenn genau ein Projekt gewählt ist (OP#1670 D7).
+    def wiki_links
+      @wiki_links ||= begin
+        helpers = Rails.application.routes.url_helpers
+        Project.allowed_to(@user, :view_wiki_pages).where(id: EnabledModule.where(name: "wiki").select(:project_id))
+          .includes(:wiki).to_h do |project|
+          slug = project.wiki&.start_page.presence || "wiki"
+          [project.identifier, { label: I18n.t("flightplan.board.wiki_of", name: project.name),
+                                 href: helpers.project_wiki_path(project, slug) }]
+        end
       end
+    end
+
+    def wiki_link
+      selected_projects.one? ? wiki_links[selected_projects.first] : nil
+    end
+
+    # Spalte, in der ein Paket nach einem Statuswechsel steht (Antwort der Move-Route).
+    def column_for(work_package)
+      load_agents
+      load_fields
+      human = labels_field && work_package.status&.name == "Neu" &&
+              labels_for([work_package.id]).fetch(work_package.id, []).any? { |label| label[:name] == HUMAN_LABEL }
+      column_key(work_package.status&.name, work_package.assigned_to_id, human:)
     end
 
     def params_for(overrides = {})
@@ -240,21 +277,55 @@ module Flightplan
       @fields["Labels"]
     end
 
+    def visible_projects
+      @visible_projects ||= Project.visible(@user).pluck(:id, :identifier)
+    end
+
+    def bereich_of
+      @bereich_of ||= Bereich.by_project_id
+    end
+
+    def priorities
+      @priorities ||= IssuePriority.pluck(:id, :name, :position, :is_default).to_h do |id, name, position, default|
+        [id, Priority.new(id:, name:, position: position.to_i, normal: default || name == "Normal")]
+      end
+    end
+
+    def open_label_names
+      scope = WorkPackage.visible(@user).joins(:status).where(statuses: { is_closed: false })
+      scope = apply_agents(apply_search(apply_projects(scope)))
+      options = labels_field.custom_options.pluck(:id, :value).to_h { |id, value| [id.to_s, value] }
+      CustomValue.where(custom_field_id: labels_field.id, customized_type: "WorkPackage", customized_id: scope.select(:id))
+        .distinct.pluck(:value).filter_map { |value| options[value.to_s] }
+    end
+
+    def human_ids(scope)
+      return Set.new unless labels_field
+
+      scope.where(statuses: { name: "Neu" })
+        .where(label_exists_sql("custom_options.value = :human_label"), label_field_id: labels_field.id, human_label: HUMAN_LABEL)
+        .pluck("work_packages.id").to_set
+    end
+
+    # Je Spalte: Priorität (höchste zuerst), dann letzte Änderung, dann ID.
     def place_rows
       buckets = Hash.new { |hash, key| hash[key] = [] }
-      filtered.pluck("work_packages.id", "statuses.name", "work_packages.assigned_to_id", "work_packages.updated_at")
-        .each do |id, status_name, assignee_id, updated_at|
-          key = column_key(status_name, assignee_id)
-          buckets[key] << [updated_at, id] if key
+      scope = filtered
+      human = human_ids(scope)
+      scope.pluck("work_packages.id", "statuses.name", "work_packages.assigned_to_id", "work_packages.updated_at",
+                  "work_packages.priority_id")
+        .each do |id, status_name, assignee_id, updated_at, priority_id|
+          key = column_key(status_name, assignee_id, human: human.include?(id))
+          buckets[key] << [-(priorities[priority_id]&.position || 0), -(updated_at&.to_f || 0), -id] if key
         end
-      buckets.each_value { |rows| rows.sort_by! { |updated_at, id| [-(updated_at&.to_f || 0), -id] } }
+      buckets.each_value(&:sort!)
       shown = {}
       @columns = COLUMNS.filter_map do |column|
         next if column[:key] == "rejected" && !show_rejected?
 
         rows = buckets[column[:key]]
         limit = limits[column[:key]]
-        ids = rows.first(limit).map(&:last)
+        ids = rows.first(limit).map { |row| -row.last }
         shown[column[:key]] = ids
         Column.new(key: column[:key], status: column[:status], count: rows.size, shown: ids.size, cards: [])
       end
@@ -264,9 +335,9 @@ module Flightplan
       end
     end
 
-    def column_key(status_name, assignee_id)
+    def column_key(status_name, assignee_id, human: false)
       case status_name
-      when "Neu" then "triage"
+      when "Neu" then human ? "human" : "triage"
       when "Wartet auf Mensch" then "question"
       when "Startfreigabe" then "agent_ready"
       when "In Arbeit" then "in_progress"
@@ -319,13 +390,9 @@ module Flightplan
       @bereich_identifiers = if selected_bereich.blank?
         nil
       else
-        root = Project.visible(@user).find_by(identifier: selected_bereich)
-        root && Project.visible(@user).where(id: root.self_and_descendants.select(:id)).pluck(:identifier)
+        label = Bereich.label_for(selected_bereich)
+        label && visible_projects.filter_map { |id, identifier| identifier if bereich_of[id] == label }
       end
-    end
-
-    def roof_for(project)
-      project.ancestors_from_root.find { |ancestor| ancestor.visible?(@user) } || project
     end
 
     def apply_search(scope)
@@ -347,15 +414,15 @@ module Flightplan
       scope.where(parts.join(" OR "), binds)
     end
 
+    # ODER innerhalb einer Familie, UND zwischen Familien (OP#1670 D5).
     def apply_labels(scope)
       return scope if selected_labels.empty?
       return scope.none unless labels_field
 
-      scope.where(
-        label_exists_sql("custom_options.value IN (:label_names)"),
-        label_field_id: labels_field.id,
-        label_names: selected_labels
-      )
+      selected_labels.group_by { |name| LabelFamilies.family_for(name)[:key] }.each_value.inject(scope) do |current, names|
+        current.where(label_exists_sql("custom_options.value IN (:label_names)"), label_field_id: labels_field.id,
+                                                                                  label_names: names)
+      end
     end
 
     def label_exists_sql(predicate)
@@ -446,17 +513,19 @@ module Flightplan
     def build_cards(ids)
       return {} if ids.empty?
 
-      rows = WorkPackage.where(id: ids).pluck(
-        :id, :subject, :project_id, :updated_at, :assigned_to_id, :type_id, :lock_version
+      rows = WorkPackage.where(id: ids).joins(:status).pluck(
+        :id, :subject, :project_id, :updated_at, :assigned_to_id, :type_id, :lock_version, :priority_id, "statuses.name"
       )
       projects = Project.where(id: rows.map { |row| row[2] }.uniq).pluck(:id, :identifier, :name).to_h do |id, identifier, name|
         [id, [identifier, name]]
       end
       types = Type.where(id: rows.map { |row| row[5] }.uniq).pluck(:id, :name).to_h
       extras = card_extras(ids, rows, types)
-      rows.to_h do |id, subject, project_id, updated_at, assignee_id, type_id, lock_version|
+      rows.to_h do |id, subject, project_id, updated_at, assignee_id, type_id, lock_version, priority_id, status_name|
         identifier, name = projects[project_id] || ["", ""]
         type_name = types[type_id]
+        labels = extras[:labels][id] || []
+        path = extras[:paths][id]
         [
           id,
           Card.new(
@@ -466,15 +535,20 @@ module Flightplan
             project_name: name,
             updated_at:,
             lock_version:,
-            labels: extras[:labels][id] || [],
+            labels:,
             assignee: extras[:people][assignee_id],
             involved: (extras[:involved][id] || []).reject { |person| person.id == assignee_id },
             pause: extras[:pause].include?(id),
-            execution_path: extras[:paths][id],
+            execution_path: path,
             children: extras[:children][id].to_i,
             question_count: extras[:questions][id].to_i,
             question_id: extras[:question_ids][id],
-            show_children: PARENT_TYPES.include?(type_name)
+            show_children: PARENT_TYPES.include?(type_name),
+            type_name:,
+            priority: priorities[priority_id],
+            status_name:,
+            bereich: bereich_of[project_id] || Dashboard::NO_BEREICH,
+            path_missing: LabelFamilies.path_missing?(status: status_name, path:, labels: labels.map { |label| label[:name] })
           )
         ]
       end
@@ -504,7 +578,7 @@ module Flightplan
       users.to_h do |id, login, first, last|
         name = [first, last].compact_blank.join(" ").presence || login
         agent = agents[id]
-        [id, Person.new(id:, name:, initials: initials(name), group: agent && agent[:group])]
+        [id, Person.new(id:, login:, name:, initials: initials(name), group: agent && agent[:group])]
       end
     end
 
@@ -563,7 +637,7 @@ module Flightplan
     end
 
     def children_for(ids, rows, types)
-      parent_ids = rows.filter_map { |id, _, _, _, _, type_id, _| id if PARENT_TYPES.include?(types[type_id]) }
+      parent_ids = rows.filter_map { |id, _, _, _, _, type_id, *| id if PARENT_TYPES.include?(types[type_id]) }
       return {} if parent_ids.empty?
 
       WorkPackage.visible(@user).where(parent_id: parent_ids).group(:parent_id).count

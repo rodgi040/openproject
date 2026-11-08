@@ -41,7 +41,19 @@ en:
       agents: Agents
       inbox: Questions
       wiki: Wiki
-      rejected_show: Rejected
+      rejected_show: Show rejected
+      rejected_hide: Hide rejected
+      widget_title: Board
+      wiki_of: "Wiki of %{name}"
+      bereich_open: "Open packages in this area; click filters the board"
+      agents_all: All agents
+      priority: Priority
+      no_path_hint: "Startfreigabe without an execution path and without an agent label (claude, codex)"
+      label_pick: "Filter by %{name}"
+      preset_reset: Clear preselection
+      preset_hint: "The board is prefiltered by the link (project, area, label or agent)."
+      move_failed: Status change rejected
+      drop_off: "The column “You do it” follows the label ready-for-human, not the status. Drop the card on another column."
       done_all: all
       done_recent: 14 days
       more: "%{count} more"
@@ -55,8 +67,9 @@ en:
       conflict: The package was changed in the meantime.
       columns:
         triage: Triage
+        human: You do it
         question: Question
-        for_you: For you
+        for_you: Decide approval
         agent_ready: Agent ready
         in_progress: In progress
         review: Review
@@ -96,9 +109,11 @@ en:
       chat: "Chat (T3 Code, Gandalf)"
       chat_admin_only: "The chat (T3 Code) is available to administrators only. Ask about a ticket in a comment on the ticket."
       dashboard_admin_only: "Only administrators see the ADA Dashboard."
-      dashboard_links_html: "Your work is on the %{board}. Open questions are listed below."
-      board: board
+      dashboard_member: "Your open questions and the board of your projects are listed below."
     widgets:
+      collapse: Collapse
+      expand: Expand
+      collapse_named: "Collapse or expand %{title}"
       search: Search …
       search_in: "Search %{title}"
       tools: "Search and filter: %{title}"
@@ -134,6 +149,7 @@ en:
         question: open question
         stale: no change
         start_failed: start failed
+        no_path: path missing
       attention:
         title: Attention
         hint: "Waiting for a human, open questions, start-approval candidates and in-progress items unchanged for more than %{days} days. Age counts from the last status change, for questions from the question."

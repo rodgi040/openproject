@@ -2,6 +2,7 @@
 
 require "#{File.dirname(__FILE__)}/../spec_helper"
 
+# OP#1674: Das Board steht als Widget auf der Startseite (/); /flightplan/board leitet dorthin um.
 RSpec.describe "Flightplan board", :skip_csrf, type: :rails_request do
   def ensure_status(name, closed: false)
     status = Status.find_by(name:) || create(:status, name:, is_closed: closed)
@@ -10,7 +11,12 @@ RSpec.describe "Flightplan board", :skip_csrf, type: :rails_request do
   end
 
   def column_html(key)
-    response.body[/data-column="#{key}" data-count="\d+" data-status="[^"]*">.*?<\/section>/m]
+    response.body[/data-column="#{key}" data-count="\d+" data-status="[^"]*"[^>]*>.*?<\/section>/m]
+  end
+
+  # Nur das Board-Widget: das Rückfragen-Widget daneben nennt die Titel der Pakete mit offener Frage.
+  def board_body
+    response.body[/id="fp-widget-board".*/m]
   end
 
   def column_count(key)
@@ -90,12 +96,11 @@ RSpec.describe "Flightplan board", :skip_csrf, type: :rails_request do
       expect(response.body).not_to include("postMessage(message, '*'")
       expect(response.body).not_to include('postMessage(message, "*"')
 
-      get "/flightplan/board"
+      get "/"
 
       expect(response).to have_http_status(:ok), response.body
       expect(response.body).not_to include('id="fp-chat-panel"')
       expect(response.body).not_to include("data-fp-chat-frame")
-      expect(response.body).not_to include("http://localhost:8092")
       directory = response.body[/id="fp-agent-directory">(.*?)<\/script>/m, 1]
       expect(directory).not_to include("&quot;")
       expect { JSON.parse(directory) }.not_to raise_error
@@ -117,42 +122,37 @@ RSpec.describe "Flightplan board", :skip_csrf, type: :rails_request do
       expect(response.body).not_to include("Geheim Neu", "Abgelehnt Paket", "Alt fertig")
       expect(column_html("triage")).to include(I18n.t("flightplan.board.pause"), "engine", 'data-children="1"')
       expect(response.body).to include("d73a4a")
-      expect(response.body).to include(
-        project_wiki_path(project, project.wiki&.start_page.presence || "wiki"),
-        project_wiki_path(other, other.wiki&.start_page.presence || "wiki")
-      )
-      expect(response.body).not_to include("/projects/#{hidden.identifier}/wiki")
+      # OP#1674 (B1): keine Wiki-Leiste mehr; ohne Recht auf das Wiki auch kein Link.
+      expect(response.body).not_to include("data-wiki=", "/projects/#{project.identifier}/wiki", "/projects/#{hidden.identifier}/wiki")
 
-      open_in_project = WorkPackage.visible(member).joins(:status).where(statuses: { is_closed: false }, project_id: project.id).count
-      expect(response.body).to match(/data-project="#{project.identifier}"[^>]*data-open="#{open_in_project}"/)
+      open_visible = WorkPackage.visible(member).joins(:status).where(statuses: { is_closed: false }).count
+      expect(response.body).to include(%(data-fp-board-bereich="Ohne Bereich" data-open="#{open_visible}"))
       expect(response.body).not_to include(%(data-project="#{hidden.identifier}"))
     end
 
     it "filters labels and projects and keeps the inbox on the same projects" do
-      get "/flightplan/board?labels=bug&projects=#{project.identifier},#{other.identifier}"
+      get "/", params: { board: { labels: "bug", projects: "#{project.identifier},#{other.identifier}" } }
 
       expect(column_count("triage")).to eq(1)
-      expect(response.body).to include("Bugpaket")
-      expect(response.body).not_to include("Sichtbar Neu", "Anderes Neu")
+      expect(board_body).to include("Bugpaket")
+      expect(board_body).not_to include("Sichtbar Neu", "Anderes Neu")
 
-      get "/flightplan/board?projects=#{project.identifier}"
-      expect(response.body).to include("Sichtbar Neu")
-      expect(response.body).not_to include("Anderes Neu")
+      get "/", params: { board: { projects: project.identifier } }
+      expect(board_body).to include("Sichtbar Neu")
+      expect(board_body).not_to include("Anderes Neu")
 
-      get "/flightplan/board?q=%23#{visible_new.id}"
-      expect(response.body).to include("Sichtbar Neu")
-      expect(response.body).not_to include("Bugpaket", "Anderes Neu")
+      get "/", params: { board: { q: "##{visible_new.id}" } }
+      expect(board_body).to include("Sichtbar Neu")
+      expect(board_body).not_to include("Bugpaket", "Anderes Neu")
 
-      get "/flightplan/board?agents=coding"
-      expect(response.body).to include("Geplant Agent")
-      expect(response.body).not_to include("Geplant Mensch", "Sichtbar Neu")
+      get "/", params: { board: { agents: "coding" } }
+      expect(board_body).to include("Geplant Agent")
+      expect(board_body).not_to include("Geplant Mensch", "Sichtbar Neu")
 
-      get "/flightplan/board?done=all&rejected=1"
-      expect(response.body).to include("Alt fertig", "Abgelehnt Paket")
+      get "/", params: { board: { done: "all", rejected: "1" } }
+      expect(board_body).to include("Alt fertig", "Abgelehnt Paket")
 
       # OP#1673: Die Rückfragen stehen im Widget der Startseite; die alte Seite leitet mit Vorauswahl dorthin.
-      get "/flightplan/board?projects=#{project.identifier}"
-      expect(response.body).to include("href=\"/?rueckfragen=project%3A#{project.identifier}\"")
       get "/flightplan/questions?projects=#{project.identifier}"
       expect(response).to redirect_to("/?rueckfragen=project%3A#{project.identifier}")
       get "/flightplan/questions.json?projects=#{project.identifier}"
@@ -162,16 +162,16 @@ RSpec.describe "Flightplan board", :skip_csrf, type: :rails_request do
     end
 
     it "caps a column limit at 500" do
-      get "/flightplan/board", params: { limits: { triage: 900 } }
+      expect(Flightplan::Board.load(user: member, params: { limits: { triage: 900 } }).limits["triage"]).to eq(500)
+      get "/", params: { board: { limits: { triage: 900 } } }
 
-      expect(response.body).to include('name="limits[triage]"')
-      expect(response.body).to include('value="500"')
-      expect(response.body).not_to include('value="900"')
+      expect(response).to have_http_status(:ok)
+      expect(response.body).not_to include("900")
     end
 
     it "leaves the chat origin in CSP and does not render the board panel" do
       login_as create(:admin)
-      get "/flightplan/board"
+      get "/"
 
       expect(response).to have_http_status(:ok), response.body
       expect(response.body).not_to include('id="fp-chat-panel"')
@@ -183,7 +183,7 @@ RSpec.describe "Flightplan board", :skip_csrf, type: :rails_request do
     end
 
     it "filters packages by the top-level project" do
-      roof = create(:project, name: "Dach Filter", public: false, workspace_type: "portfolio")
+      roof = create(:project, name: "Dach Filter", identifier: "ada-main", public: false, workspace_type: "portfolio")
       inside = create(:project, name: "Dach Kind", parent: roof, public: false)
       outside = create(:project, name: "Neben Filter", public: false)
       role_filter = create(:project_role, permissions: %i[view_work_packages])
@@ -192,20 +192,22 @@ RSpec.describe "Flightplan board", :skip_csrf, type: :rails_request do
       create(:work_package, project: outside, author: viewer, status: neu, subject: "Ausserhalb Dach")
       login_as viewer
 
-      get "/flightplan/board", params: { bereich: roof.identifier }
+      get "/", params: { board: { bereich: roof.identifier } }
 
       expect(response).to have_http_status(:ok), response.body
-      expect(response.body).to include("data-bereich=\"#{roof.identifier}\"")
+      expect(response.body).to include('data-fp-board-bereich="ADA MAIN"')
       expect(response.body).to include("data-project=\"#{inside.identifier}\"")
       expect(response.body).not_to include("data-project=\"#{outside.identifier}\"")
       expect(response.body).to include("Im Dach")
       expect(response.body).not_to include("Ausserhalb Dach")
     end
 
-    it "redirects the menu target" do
+    it "redirects the old page to the board widget" do
       get "/flightplan"
+      expect(response).to redirect_to("/#fp-widget-board")
 
-      expect(response).to redirect_to("/flightplan/board")
+      get "/flightplan/board"
+      expect(response).to redirect_to("/#fp-widget-board")
     end
   end
 

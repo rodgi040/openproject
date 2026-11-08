@@ -1,0 +1,144 @@
+<%# OP#1674: Kanban-Board als Insel-Widget (früher /flightplan/board). Suche, Projekt/Bereich, Agent und Labels filtern im
+    Browser über die gerenderten Karten; Vorauswahl aus alten Links (?board[...]) filtert auf dem Server. Verschieben per
+    Drag & Drop über die Move-Route. %>
+<% board = @board_widget %>
+<% dash_path = ->(**opts) { controller.is_a?(::HomescreenController) ? root_path(**opts) : flightplan_dashboard_path(**opts) } %>
+<% board_link = ->(overrides = {}) { dash_path.(board: board.params_for(overrides).presence, anchor: "fp-widget-board") } %>
+<% tree = @dashboard ? @dashboard.project_tree : Flightplan::Dashboard.project_tree(User.current) %>
+<% paths = tree.to_h { |entry| [entry[:identifier], entry[:path]] } %>
+<% path_of = ->(card) { paths[card.project_identifier] || [card.project_identifier] } %>
+<% cards = board.columns.flat_map(&:cards) %>
+<% entries = cards.map { |card| { bereich: card.bereich, path: path_of.(card), statuses: [], labels: card.filter_labels } } %>
+<% filters = Flightplan::WidgetFilters.new(entries, tree:, status_order: []) %>
+<% selected_scope = if board.selected_projects.one?
+                      "project:#{board.selected_projects.first}"
+                    elsif (label = Flightplan::Bereich.label_for(board.selected_bereich))
+                      "bereich:#{label}"
+                    end %>
+<% wiki = board.wiki_link %>
+<% head = capture do %>
+  <nav class="fp-board-bereiche" aria-label="<%= t("flightplan.board.bereiche") %>">
+    <% board.bereiche.each do |row| %>
+      <button type="button" class="fp-chip" data-fp-board-bereich="<%= row[:name] %>" data-open="<%= row[:open_count] %>" title="<%= t("flightplan.board.bereich_open") %>"><%= row[:name] %> <span><%= row[:open_count] %></span></button>
+    <% end %>
+  </nav>
+  <%= link_to (wiki ? wiki[:label] : ""), (wiki ? wiki[:href] : "#"), class: "fp-board-wiki", hidden: wiki.nil?, data: { fp_board_wiki: "", turbo: false } %>
+<% end %>
+<% tools = capture do %>
+  <select class="fp-widget-select" data-fp-filter-attr="agents" aria-label="<%= t("flightplan.board.agents") %>">
+    <option value=""><%= t("flightplan.board.agents_all") %></option>
+    <% board.agent_options.each do |option| %>
+      <option value="<%= option[:key] %>"><%= option[:label] %></option>
+    <% end %>
+  </select>
+  <span class="fp-board-links">
+    <% if board.preset? %>
+      <%= link_to t("flightplan.board.preset_reset"), dash_path.(anchor: "fp-widget-board"), data: { fp_board_preset_reset: "", turbo: false }, title: t("flightplan.board.preset_hint") %>
+    <% end %>
+    <%= link_to (board.show_rejected? ? t("flightplan.board.rejected_hide") : t("flightplan.board.rejected_show")),
+          board_link.(rejected: (board.show_rejected? ? nil : "1")), data: { turbo: false } %>
+  </span>
+<% end %>
+<%= render layout: "flightplan/dashboard/widget",
+           locals: { key: "board", title: t("flightplan.board.widget_title"), filters:, total: board.total_count, collapsible: true,
+                     head:, tools:, label_groups: board.label_groups, label_style: "chips", selected_scope: } do %>
+  <script type="application/json" data-fp-board-wikis><%= json_escape(board.wiki_links.to_json).html_safe %></script>
+  <div id="fp-board-alert" class="fp-board-alert" role="alert" hidden></div>
+  <div id="fp-board"
+       class="fp-board-scroll"
+       data-move-url="<%= flightplan_board_move_path %>"
+       data-csrf="<%= form_authenticity_token %>"
+       data-fp-failed-text="<%= t("flightplan.board.move_failed") %>"
+       data-fp-drop-off-text="<%= t("flightplan.board.drop_off") %>">
+    <% board.columns.each do |column| %>
+      <% closed = Flightplan::Board::CLOSED_COLUMNS.include?(column.key) %>
+      <%= tag.section class: "fp-column", data: { column: column.key, count: column.count, status: column.status, drop: ("off" if column.key == "human"), fp_group: "" } do %>
+        <header class="fp-column-head">
+          <strong><%= t("flightplan.board.columns.#{column.key}") %></strong>
+          <span class="fp-count" data-fp-group-count data-fp-total="<%= column.count %>"><%= column.count %></span>
+          <% if column.key == "done" %>
+            <%= link_to(board.done_all? ? t("flightplan.board.done_recent") : t("flightplan.board.done_all"),
+                  board_link.(done: (board.done_all? ? nil : "all")), data: { turbo: false }) %>
+          <% end %>
+        </header>
+        <div class="fp-column-cards">
+          <% if column.cards.empty? %>
+            <p class="fp-empty"><%= t("flightplan.board.empty") %></p>
+          <% end %>
+          <% column.cards.each do |card| %>
+            <%= tag.article class: "fp-card", draggable: true, data: {
+                  fp_board_card: "1",
+                  id: card.id,
+                  lock_version: card.lock_version,
+                  project: card.project_identifier,
+                  subject: card.subject,
+                  status: column.status,
+                  labels: card.label_names.to_json,
+                  url: work_package_path(card.id),
+                  column: column.key,
+                  **Flightplan::WidgetFilters.item_data(bereich: card.bereich, path: path_of.(card), statuses: [card.status_name],
+                                                        labels: card.label_names, agents: card.agent_tokens, open: !closed)
+                } do %>
+              <div class="fp-card-line">
+                <%= link_to "##{card.id}", work_package_path(card.id), class: "fp-id" %>
+                <% if card.type_name.present? %>
+                  <span class="fp-type" data-fp-type="<%= card.type_name %>"><%= card.type_name %></span>
+                <% end %>
+                <% if card.priority && !card.priority.normal %>
+                  <span class="fp-prio" data-fp-priority="<%= card.priority.name %>" data-position="<%= card.priority.position %>" title="<%= t("flightplan.board.priority") %>"><%= card.priority.name %></span>
+                <% end %>
+                <% if card.path_missing %>
+                  <span class="fp-badge fp-badge--warn" data-fp-badge="no-path" title="<%= t("flightplan.board.no_path_hint") %>"><%= t("flightplan.dashboard.reasons.no_path") %></span>
+                <% end %>
+                <span class="fp-card-project"><%= card.project_name %></span>
+              </div>
+              <h3 class="fp-card-title"><%= link_to card.subject, flightplan_workplace_path(card.id), data: { turbo: false } %></h3>
+              <% chips = card.chip_labels %>
+              <% if chips.any? %>
+                <div class="fp-card-labels">
+                  <% chips.each do |label| %>
+                    <button type="button" class="fp-label-chip" data-fp-label-pick="<%= label[:name] %>" title="<%= t("flightplan.board.label_pick", name: label[:name]) %>" style="background-color:#<%= label[:color] %>;color:#<%= label[:ink] %>"><%= label[:name] %></button>
+                  <% end %>
+                </div>
+              <% end %>
+              <div class="fp-card-meta">
+                <% if card.assignee %>
+                  <span class="fp-avatar" title="<%= [card.assignee.name, card.assignee.group].compact.join(" · ") %>"><%= card.assignee.initials %></span>
+                  <span class="fp-sr"><%= card.assignee.name %></span>
+                  <% if card.assignee.group %>
+                    <span class="fp-badge"><%= card.assignee.group %></span>
+                  <% end %>
+                <% end %>
+                <% card.involved.each do |person| %>
+                  <span class="fp-avatar -small" title="<%= [person.name, person.group].compact.join(" · ") %>"><%= person.initials %></span>
+                <% end %>
+                <% if card.pause %>
+                  <span class="fp-badge"><%= t("flightplan.board.pause") %></span>
+                <% end %>
+                <% if card.execution_path.present? %>
+                  <span class="fp-badge" data-fp-path><%= card.execution_path %></span>
+                <% end %>
+                <% if card.show_children %>
+                  <span class="fp-badge" data-children="<%= card.children %>"><%= t("flightplan.board.children", count: card.children) %></span>
+                <% end %>
+                <% if card.question_count.positive? %>
+                  <%= link_to t("flightplan.board.open_questions", count: card.question_count),
+                        "/#q-#{card.question_id}",
+                        class: "fp-badge",
+                        data: { turbo: false } %>
+                <% end %>
+                <time datetime="<%= card.updated_at.iso8601 %>"><%= card.updated_at.strftime("%d.%m.%Y") %></time>
+              </div>
+            <% end %>
+          <% end %>
+          <% if column.count > column.shown %>
+            <%= link_to t("flightplan.board.more", count: column.count - column.shown),
+                  board_link.(limits: board.limits.merge(column.key => column.shown + Flightplan::Board::PAGE)),
+                  class: "fp-more",
+                  data: { turbo: false } %>
+          <% end %>
+        </div>
+      <% end %>
+    <% end %>
+  </div>
+<% end %>

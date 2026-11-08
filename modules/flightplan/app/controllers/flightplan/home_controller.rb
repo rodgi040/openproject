@@ -1,19 +1,14 @@
 # frozen_string_literal: true
 
 module Flightplan
+  # OP#1674: Die Seite „Flightplan“ ist im ADA-Dashboard aufgegangen.
   class HomeController < ApplicationController
     before_action :require_login
 
     no_authorization_required! :show
 
-    layout "global"
-
-    current_menu_item [:show] do
-      :flightplan
-    end
-
     def show
-      redirect_to flightplan_board_path
+      redirect_to main_app.root_path(anchor: "fp-widget-board")
     end
   end
 end

@@ -9,19 +9,12 @@ module OpenProject::Flightplan
     register "openproject-flightplan",
              author_url: "https://github.com/rodgi040/openproject",
              bundled: true do
-      menu :global_menu,
-           :flightplan,
-           { controller: "/flightplan/board", action: :index },
-           caption: :"flightplan.label",
-           after: :home,
-           icon: :bookmark,
-           if: Proc.new { User.current.logged? }
-
+      # OP#1674: kein Eintrag „Flightplan“ mehr; das Board ist ein Widget der Startseite.
       menu :global_menu,
            :flightplan_dashboard,
            { controller: "/flightplan/dashboard", action: :index },
            caption: :"flightplan.dashboard.menu",
-           after: :flightplan,
+           after: :home,
            icon: :graph,
            if: Proc.new { User.current.admin? }
     end

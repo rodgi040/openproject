@@ -1,13 +1,22 @@
 <%# OP#1672: Hülle eines Insel-Widgets. Locals: key, title, filters (Flightplan::WidgetFilters), optional title_id und
-    selected_scope (vorausgewählter Wert im Projekt-/Bereichsfilter, OP#1673). %>
+    selected_scope (vorausgewählter Wert im Projekt-/Bereichsfilter, OP#1673). OP#1674, optional: total (Zahl im Kopf, wenn
+    nicht alle Einträge gerendert sind), collapsible (Knopf zum Einklappen, im Browser gemerkt), head (HTML im Kopf), tools
+    (weitere Filter), label_groups (statt der Gruppen aus filters), label_style ("chips": Labels als Chips statt Liste). %>
 <% title_id = local_assigns[:title_id] || "fp-widget-#{key}-title" %>
 <% selected_scope = local_assigns[:selected_scope] %>
 <% wide = Flightplan::WidgetFilters::WIDE.include?(key) %>
+<% total = local_assigns[:total] %>
+<% collapsible = local_assigns[:collapsible] %>
 <section class="fp-widget<%= " fp-widget--wide" if wide %>" id="fp-widget-<%= key %>" data-fp-widget="<%= key %>" aria-labelledby="<%= title_id %>">
   <header class="fp-widget-head">
+    <% if collapsible %>
+      <button type="button" class="fp-widget-toggle" data-fp-widget-toggle aria-expanded="true" aria-controls="fp-widget-<%= key %>-content" title="<%= t("flightplan.widgets.collapse") %>" aria-label="<%= t("flightplan.widgets.collapse_named", title:) %>" data-fp-label-open="<%= t("flightplan.widgets.collapse") %>" data-fp-label-closed="<%= t("flightplan.widgets.expand") %>"></button>
+    <% end %>
     <h2 id="<%= title_id %>"><%= title %></h2>
-    <span class="fp-widget-count" data-fp-widget-count title="<%= t("flightplan.widgets.count") %>"><%= filters.count %></span>
+    <%= tag.span(total || filters.count, class: "fp-widget-count", data: { fp_widget_count: "", fp_total: total }, title: t("flightplan.widgets.count")) %>
+    <%= local_assigns[:head] %>
   </header>
+  <div class="fp-widget-content" id="fp-widget-<%= key %>-content">
   <div class="fp-widget-tools" data-fp-widget-tools role="search" aria-label="<%= t("flightplan.widgets.tools", title:) %>">
     <input type="search" class="fp-widget-search" data-fp-filter="text" placeholder="<%= t("flightplan.widgets.search") %>" aria-label="<%= t("flightplan.widgets.search_in", title:) %>">
     <% scopes = filters.scopes %>
@@ -32,14 +41,16 @@
         <% end %>
       </select>
     <% end %>
-    <% label_groups = filters.label_groups %>
+    <%= local_assigns[:tools] %>
+    <% label_groups = local_assigns[:label_groups] || filters.label_groups %>
     <% if label_groups.any? %>
-      <%= render "flightplan/dashboard/label_filter", groups: label_groups %>
+      <%= render "flightplan/dashboard/label_filter", groups: label_groups, style: local_assigns[:label_style] %>
     <% end %>
     <button type="button" class="fp-widget-reset" data-fp-filter-reset hidden><%= t("flightplan.widgets.reset") %></button>
   </div>
   <div class="fp-widget-body" data-fp-widget-body tabindex="0">
     <%= yield %>
     <p class="fp-widget-none fp-dash-hint" data-fp-widget-none hidden><%= t("flightplan.widgets.none") %></p>
+  </div>
   </div>
 </section>

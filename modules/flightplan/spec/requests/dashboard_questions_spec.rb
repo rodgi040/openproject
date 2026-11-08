@@ -20,9 +20,9 @@ RSpec.describe "Flightplan questions widget", :skip_csrf, type: :rails_request d
     create(:list_project_custom_field, name: "Bereich", project_custom_field_section: section,
                                        possible_values: ["ADA MAIN", "Nuova AI Solutions", "NuovaGen"])
   end
-  let!(:ada) { create(:project, name: "Frage Ada", identifier: "frage-ada", public: false) }
+  let!(:ada) { create(:project, name: "Frage Ada", identifier: "ada-main", public: false) }
   let!(:factory) { create(:project, name: "Frage Fabrik", identifier: "frage-fabrik", parent: ada, public: false) }
-  let!(:gen) { create(:project, name: "Frage Gen", identifier: "frage-gen", public: false) }
+  let!(:gen) { create(:project, name: "Frage Gen", identifier: "nuovagen", public: false) }
   let(:admin) { create(:admin, language: "de") }
   let!(:neu) { ensure_status("Neu") }
   let!(:waiting) { ensure_status("Wartet auf Mensch") }
@@ -91,7 +91,7 @@ RSpec.describe "Flightplan questions widget", :skip_csrf, type: :rails_request d
         get path
         expect(response).to have_http_status(:ok)
         keys = page.css("#fp-home .fp-home-main .fp-widgets > .fp-widget").map { |node| node["data-fp-widget"] }
-        expect(keys).to eq(%w[overview attention questions running betrieb])
+        expect(keys).to eq(%w[overview attention questions board running betrieb])
         expect(questions_widget["class"]).to include("fp-widget--wide")
         expect(questions_widget.at_css(".fp-widget-head h2").text).to eq("Rückfragen")
         expect(questions_widget.at_css("[data-fp-widget-count]").text.strip).to eq("2")
@@ -123,13 +123,13 @@ RSpec.describe "Flightplan questions widget", :skip_csrf, type: :rails_request d
       expect(groups.map { |group| group["data-questions-group"] }).to eq(["ADA MAIN", "NuovaGen"])
       node = item(factory_question)
       expect(node["data-fp-area"]).to eq("ADA MAIN")
-      expect(JSON.parse(node["data-fp-projects"])).to eq(%w[frage-fabrik frage-ada])
+      expect(JSON.parse(node["data-fp-projects"])).to eq(%w[frage-fabrik ada-main])
       expect(JSON.parse(node["data-fp-statuses"])).to eq(["Wartet auf Mensch"])
       expect(JSON.parse(node["data-fp-labels"])).to eq(["P1"])
       tools = questions_widget.at_css("[data-fp-widget-tools]")
       expect(tools.at_css("input[type='search'][data-fp-filter='text']")).to be_present
       scope = tools.css("select[data-fp-filter='scope'] option").map { |option| option["value"] }
-      expect(scope).to include("bereich:ADA MAIN", "bereich:NuovaGen", "project:frage-fabrik", "project:frage-gen")
+      expect(scope).to include("bereich:ADA MAIN", "bereich:NuovaGen", "project:frage-fabrik", "project:nuovagen")
       expect(tools.css("select[data-fp-filter='status'] option").map { |option| option["value"] }.compact_blank)
         .to eq(["Wartet auf Mensch"])
       expect(tools.css("[data-fp-filter='labels'] input[type='checkbox']").map { |box| box["value"] }).to eq(["P1"])
@@ -186,10 +186,10 @@ RSpec.describe "Flightplan questions widget", :skip_csrf, type: :rails_request d
       expect(response).to redirect_to("/?rueckfragen=alle")
       get "/projects/frage-fabrik/flightplan/questions"
       expect(response).to redirect_to("/?rueckfragen=project%3Afrage-fabrik")
-      get "/flightplan/questions", params: { project: "frage-gen" }
-      expect(response).to redirect_to("/?rueckfragen=project%3Afrage-gen")
-      get "/flightplan/questions", params: { projects: "frage-gen" }
-      expect(response).to redirect_to("/?rueckfragen=project%3Afrage-gen")
+      get "/flightplan/questions", params: { project: "nuovagen" }
+      expect(response).to redirect_to("/?rueckfragen=project%3Anuovagen")
+      get "/flightplan/questions", params: { projects: "nuovagen" }
+      expect(response).to redirect_to("/?rueckfragen=project%3Anuovagen")
     end
 
     it "keeps the JSON list of the old page" do
@@ -217,7 +217,7 @@ RSpec.describe "Flightplan questions widget", :skip_csrf, type: :rails_request d
     end
 
     it "drops the menu entries of the old page" do
-      get "/flightplan/board"
+      get "/"
       expect(response).to have_http_status(:ok)
       expect(page.css("a[href$='/flightplan/questions']")).to be_empty
       get "/projects/frage-fabrik/work_packages"
@@ -258,7 +258,7 @@ RSpec.describe "Flightplan questions widget", :skip_csrf, type: :rails_request d
         expect(response).to have_http_status(:ok)
         expect(page.at_css("#fp-dashboard")).to be_nil
         keys = page.css("#fp-home .fp-home-main .fp-widgets > .fp-widget").map { |node| node["data-fp-widget"] }
-        expect(keys).to eq(%w[questions])
+        expect(keys).to eq(%w[questions board])
         expect(questions_widget.css("[data-fp-item]").map { |node| node["data-fp-question"] })
           .to eq([factory_question.id.to_s])
         expect(page.at_css("#fp-home-chat [data-fp-chat-questions]")).to be_nil
