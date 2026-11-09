@@ -105,6 +105,8 @@ en:
       run_kinds:
         claim: Claim
         start: Start
+    chat:
+      saved_as_comment: "Saved as a comment on #%{id} – it arrives when the agent next reads the ticket."
     home:
       main: ADA Dashboard
       chat: "Chat (T3 Code, Gandalf)"

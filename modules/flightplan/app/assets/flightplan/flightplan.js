@@ -226,6 +226,36 @@ function fpAnsweredMessage(id, response, payload) {
   };
 }
 
+// OP#1711 Welle 2: Rückmeldung an den Chat nach einer Nachricht, die als Kommentar gespeichert wurde (fp:commented).
+// "Gespeichert" heißt nicht "zugestellt": ein Agent sieht den Kommentar erst beim nächsten Lesen.
+function fpCommentedMessage(wpId, clientId, response, payload) {
+  var ok = !!(response && response.ok && payload && payload.ok);
+  return {
+    type: "fp:commented",
+    wpId: Number(wpId),
+    clientId: String(clientId || ""),
+    ok: ok,
+    eventId: ok ? String(payload.event_id || "") : "",
+    message: ok ? String(payload.message || "") : "",
+    error: ok ? "" : String((payload && payload.error) || (response ? "HTTP " + response.status : "Netzwerkfehler"))
+  };
+}
+
+// OP#1711 Welle 2: neue Ereignisse (Id wie c12, s12, q3) an die bekannten anfügen, ohne Dubletten. Reihenfolge nach Zeit.
+function fpMergeEvents(known, incoming) {
+  var seen = {};
+  var merged = [];
+  (known || []).concat(incoming || []).forEach(function (event) {
+    if (!event || !event.id || seen[event.id]) return;
+    seen[event.id] = true;
+    merged.push(event);
+  });
+  merged.sort(function (a, b) {
+    return String(a.at).localeCompare(String(b.at)) || String(a.id).localeCompare(String(b.id), undefined, { numeric: true });
+  });
+  return merged.slice(-60);
+}
+
 (function () {
   var panel = document.getElementById("fp-chat-panel");
   var toggle = panel && panel.querySelector("[data-fp-chat-toggle]");
@@ -382,10 +412,63 @@ function fpMountChat(root, frame) {
     frame.contentWindow.postMessage(message, origin);
   }
 
+  // OP#1711 Welle 2: Ereignisse des offenen Tickets (Kommentare, Statuswechsel, Rückfragen). Das Modul fragt etwa alle
+  // 10 s nach und sendet den bekannten Stand als fp:events. Ereignisse sind nur Anzeige; die Id macht Wiederholungen
+  // und Neuladen idempotent.
+  var eventsFor = 0;
+  var eventList = [];
+  var eventCursor = { journal: 0, question: 0 };
+  var eventsDisabled = false;
+  var eventsBusy = false;
+
+  function sendEvents() {
+    if (!eventsFor) return;
+    post({ type: "fp:events", wpId: eventsFor, events: eventList });
+  }
+
+  function pollEvents() {
+    var id = wp && Number(wp.id);
+    if (eventsDisabled || eventsBusy || !id || !frame || !frame.getAttribute("src")) return;
+    if (id !== eventsFor) {
+      eventsFor = id;
+      eventList = [];
+      eventCursor = { journal: 0, question: 0 };
+    }
+    eventsBusy = true;
+    var query = "wp=" + id + (eventCursor.journal ? "&after=" + eventCursor.journal : "") +
+      (eventCursor.question ? "&after_question=" + eventCursor.question : "");
+    fetch("/flightplan/chat/events?" + query, { headers: { "Accept": "application/json" }, credentials: "same-origin" })
+      .then(function (response) {
+        if (response.status === 403) eventsDisabled = true;
+        return response.json().catch(function () { return {}; }).then(function (payload) {
+          return { ok: response.ok, payload: payload };
+        });
+      })
+      .then(function (result) {
+        eventsBusy = false;
+        if (!result.ok || !result.payload.ok || Number(result.payload.work_package_id) !== eventsFor) return;
+        var before = eventList.length;
+        eventList = fpMergeEvents(eventList, result.payload.events);
+        var cursor = result.payload.cursor || {};
+        eventCursor = { journal: Number(cursor.journal) || eventCursor.journal, question: Number(cursor.question) || eventCursor.question };
+        if (eventList.length !== before || before === 0) sendEvents();
+      })
+      .catch(function () {
+        eventsBusy = false;
+      });
+  }
+
   function sendState() {
     if (wp && wp.id) post({ type: "fp:context", wp: wp });
     post({ type: "fp:questions", items: questions });
+    sendEvents();
+    if (wp && Number(wp.id) !== eventsFor) pollEvents();
   }
+
+  window.setInterval(function () {
+    if (document.hidden) return;
+    pollEvents();
+  }, 10000);
 
   var offline = root.querySelector("[data-fp-chat-offline]");
   var reload = root.querySelector("[data-fp-chat-reload]");
@@ -445,6 +528,29 @@ function fpMountChat(root, frame) {
       if (offline) offline.hidden = true;
       frame.hidden = false;
       sendState();
+      return;
+    }
+    if (data.type === "fp:comment") {
+      // OP#1711 Welle 2: Nachricht aus dem Thread wird Kommentar im Namen des angemeldeten Menschen (Session, CSRF).
+      var wpId = Number(data.wpId);
+      if (!wpId || typeof data.text !== "string") return;
+      fetch("/flightplan/chat/comments", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "X-CSRF-Token": root.dataset.csrf,
+          "Accept": "application/json",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({ wp: String(wpId), text: data.text.slice(0, 4000) }).toString()
+      }).then(function (response) {
+        return response.json().catch(function () { return {}; }).then(function (payload) {
+          post(fpCommentedMessage(wpId, data.clientId, response, payload));
+          if (response.ok && payload.ok) pollEvents();
+        });
+      }).catch(function () {
+        post(fpCommentedMessage(wpId, data.clientId, null, {}));
+      });
       return;
     }
     if (data.type !== "fp:answer" || !data.id) return;

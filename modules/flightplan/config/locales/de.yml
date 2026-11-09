@@ -105,6 +105,8 @@ de:
       run_kinds:
         claim: Claim
         start: Start
+    chat:
+      saved_as_comment: "Als Kommentar an #%{id} gespeichert – kommt beim nächsten Lesen an."
     home:
       main: ADA Dashboard
       chat: "Chat (T3 Code, Gandalf)"
