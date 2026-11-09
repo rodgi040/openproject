@@ -109,6 +109,20 @@ en:
       main: ADA Dashboard
       chat: "Chat (T3 Code, Gandalf)"
       chat_admin_only: "The chat (T3 Code) is available to administrators only. Ask about a ticket in a comment on the ticket."
+      tickets: "Running tickets"
+      new_chat: "New chat"
+      no_running_tickets: "No running tickets"
+      recent_tickets: "Recently opened"
+      more_tickets: "more (%{count})"
+      more_tickets_of: "more (%{count} of %{total})"
+      running_partial: "Running: %{shown} of %{total}"
+      running_total: "Running (%{total})"
+      active_new: "new chat"
+      active_prefix: "active"
+      ticket_status:
+        progress: "Active"
+        waiting: "Waiting"
+        review: "Review"
       dashboard_admin_only: "Only administrators see the ADA Dashboard."
       dashboard_member: "Your open questions and the board of your projects are listed below."
     widgets:

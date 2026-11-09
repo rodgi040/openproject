@@ -484,8 +484,150 @@ function fpMountChat(root, frame) {
     if (!detail.id) return;
     wp = { id: detail.id, subject: detail.subject, project: detail.project, status: detail.status,
            labels: detail.labels || [], url: detail.url };
-    post({ type: "fp:context", wp: wp });
+    // OP#1711: Auf der Startseite (Ticketleiste) öffnet die Karte den Thread des Tickets, der Kontext folgt beim Laden.
+    if (bar) openTicket(detail.id, detail.subject, true);
+    else post({ type: "fp:context", wp: wp });
   });
+
+  // OP#1711: Ticketleiste der Startseite. Ein Klick lädt /chat/embed/<id> (T3 holt oder legt den Thread je Ticket an,
+  // idempotent); "Neuer Chat" lädt /chat/. Titel sind untrusted und gelangen nur per textContent in die Seite.
+  var bar = root.querySelector("[data-fp-chat-tickets]");
+  var recentKey = "fp-chat-recent-tickets";
+
+  function readRecent() {
+    try {
+      var list = JSON.parse(window.localStorage.getItem(recentKey) || "[]");
+      return Array.isArray(list) ? list.filter(function (item) { return item && Number(item.id) > 0; }).slice(0, 5) : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function markActive(id) {
+    var found = false;
+    bar.querySelectorAll("[data-fp-chat-ticket], [data-fp-chat-new]").forEach(function (node) {
+      var active = !found && (id ? node.dataset.fpChatTicket === String(id) : node.hasAttribute("data-fp-chat-new"));
+      if (active) {
+        found = true;
+        node.setAttribute("aria-current", "true");
+      } else {
+        node.removeAttribute("aria-current");
+      }
+    });
+    var label = bar.querySelector("[data-fp-chat-active]");
+    if (label) {
+      var current = id ? bar.querySelector("[data-fp-chat-ticket='" + String(Number(id)) + "']") : null;
+      var text = id ? "#" + Number(id) + (current && current.dataset.subject ? " " + current.dataset.subject : (wp && wp.subject ? " " + wp.subject : "")) : label.dataset.new;
+      label.textContent = label.dataset.prefix + ": " + text;
+    }
+  }
+
+  function renderRecent() {
+    var holder = bar.querySelector("[data-fp-chat-recent]");
+    var list = bar.querySelector("[data-fp-chat-recent-list]");
+    if (!holder || !list) return;
+    var listed = {};
+    bar.querySelectorAll("[data-fp-chat-ticket-list] [data-fp-chat-ticket]").forEach(function (node) {
+      listed[node.dataset.fpChatTicket] = true;
+    });
+    var items = readRecent().filter(function (item) { return !listed[String(Number(item.id))]; });
+    list.textContent = "";
+    items.forEach(function (item) {
+      var li = document.createElement("li");
+      var link = document.createElement("a");
+      var id = document.createElement("span");
+      var title = document.createElement("span");
+      link.className = "fp-chat-ticket";
+      link.href = origin + "/chat/embed/" + Number(item.id);
+      link.setAttribute("data-fp-chat-ticket", String(Number(item.id)));
+      link.setAttribute("data-subject", String(item.subject || ""));
+      id.className = "fp-chat-ticket-id";
+      id.textContent = "#" + Number(item.id);
+      title.className = "fp-chat-ticket-title";
+      title.textContent = String(item.subject || "");
+      link.appendChild(id);
+      link.appendChild(title);
+      li.appendChild(link);
+      list.appendChild(li);
+    });
+    holder.hidden = items.length === 0;
+    markActive(wp && wp.id);
+  }
+
+  function rememberTicket(id, subject) {
+    var items = readRecent().filter(function (item) { return Number(item.id) !== Number(id); });
+    items.unshift({ id: Number(id), subject: String(subject || "").slice(0, 70) });
+    try {
+      window.localStorage.setItem(recentKey, JSON.stringify(items.slice(0, 5)));
+    } catch (error) {
+      // localStorage nicht verfügbar: die Leiste funktioniert ohne Verlauf weiter.
+    }
+    renderRecent();
+  }
+
+  function loadFrame(url) {
+    frame.dataset.src = url;
+    // Chat nicht erreichbar (kein src): "Neu laden" lädt danach den gewählten Thread.
+    if (!frame.getAttribute("src")) return;
+    if (frame.getAttribute("src") === url) {
+      sendState();
+      return;
+    }
+    frame.src = url;
+  }
+
+  function openTicket(id, subject, fromBoard) {
+    if (!bar || !frame || !Number(id)) return;
+    if (!fromBoard || !wp || Number(wp.id) !== Number(id)) wp = { id: Number(id), subject: subject };
+    markActive(id);
+    rememberTicket(id, subject);
+    loadFrame(origin + "/chat/embed/" + Number(id));
+  }
+
+  if (bar && frame) {
+    wp = {};
+    bar.addEventListener("click", function (event) {
+      var link = event.target.closest("[data-fp-chat-ticket]");
+      var fresh = event.target.closest("[data-fp-chat-new]");
+      var more = event.target.closest("[data-fp-chat-more-toggle]");
+      if (link) {
+        event.preventDefault();
+        openTicket(link.dataset.fpChatTicket, link.dataset.subject);
+      } else if (fresh) {
+        wp = {};
+        markActive(null);
+        loadFrame(origin + "/chat/");
+      } else if (more) {
+        var open = more.getAttribute("aria-expanded") !== "true";
+        bar.querySelectorAll("li[data-fp-chat-more]").forEach(function (node) { node.hidden = !open; });
+        more.setAttribute("aria-expanded", open ? "true" : "false");
+        more.textContent = open ? "−" : more.dataset.label;
+      }
+    });
+    var head = bar.querySelector("[data-fp-chat-tickets-toggle]");
+    var body = bar.querySelector("[data-fp-chat-tickets-body]");
+    var openKey = "fp-chat-tickets-open";
+    function setBarOpen(open, persist) {
+      body.hidden = !open;
+      head.setAttribute("aria-expanded", open ? "true" : "false");
+      head.querySelector("[data-fp-chat-tickets-arrow]").textContent = open ? "\u25B4" : "\u25BE";
+      if (persist) {
+        try { window.localStorage.setItem(openKey, open ? "1" : "0"); } catch (error) { /* ohne Speicher */ }
+      }
+    }
+    if (head && body) {
+      var stored = null;
+      try { stored = window.localStorage.getItem(openKey); } catch (error) { stored = null; }
+      var small = typeof window.matchMedia === "function" && window.matchMedia("(max-height: 700px)").matches;
+      setBarOpen(stored === null ? !small : stored === "1", false);
+      head.addEventListener("click", function () {
+        setBarOpen(head.getAttribute("aria-expanded") !== "true", true);
+      });
+    }
+    var moreButton = bar.querySelector("[data-fp-chat-more-toggle]");
+    if (moreButton) moreButton.dataset.label = moreButton.textContent.trim();
+    renderRecent();
+  }
 }
 
 (function () {

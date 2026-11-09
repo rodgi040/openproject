@@ -11,6 +11,49 @@
       <p><%= t("flightplan.workplace.chat_unreachable") %></p>
       <button type="button" data-fp-chat-reload><%= t("flightplan.workplace.chat_reload") %></button>
     </div>
+    <% tickets = @chat_tickets ? @chat_tickets[:items] : [] %>
+    <% total = @chat_tickets ? @chat_tickets[:total] : 0 %>
+    <% visible_count = 6 %>
+    <nav class="fp-chat-tickets" data-fp-chat-tickets aria-label="<%= t("flightplan.home.tickets") %>">
+      <button type="button" class="fp-chat-tickets-head" data-fp-chat-tickets-toggle aria-expanded="true">
+        <span class="fp-chat-tickets-head-title" data-fp-chat-tickets-count><%= total > tickets.size ? t("flightplan.home.running_partial", shown: tickets.size, total: total) : t("flightplan.home.running_total", total: total) %></span>
+        <span class="fp-chat-tickets-head-active" data-fp-chat-active data-prefix="<%= t("flightplan.home.active_prefix") %>" data-new="<%= t("flightplan.home.active_new") %>"><%= t("flightplan.home.active_prefix") %>: <%= t("flightplan.home.active_new") %></span>
+        <span aria-hidden="true" data-fp-chat-tickets-arrow>&#9662;</span>
+      </button>
+      <div class="fp-chat-tickets-body" data-fp-chat-tickets-body>
+        <button type="button" class="fp-chat-ticket fp-chat-ticket-new" data-fp-chat-new aria-current="true">
+          <%= t("flightplan.home.new_chat") %>
+        </button>
+        <% if tickets.empty? %>
+          <p class="fp-chat-tickets-empty" data-fp-chat-tickets-empty><%= t("flightplan.home.no_running_tickets") %></p>
+        <% else %>
+          <ul class="fp-chat-ticket-list" data-fp-chat-ticket-list>
+            <% tickets.each_with_index do |ticket, index| %>
+              <li<%= " hidden data-fp-chat-more".html_safe if index >= visible_count %>>
+                <a class="fp-chat-ticket"
+                   href="<%= Flightplan::Workplace::CHAT_ORIGIN %>/chat/embed/<%= ticket[:id] %>"
+                   data-fp-chat-ticket="<%= ticket[:id] %>"
+                   data-subject="<%= ticket[:subject] %>"
+                   title="<%= ticket[:status] %>: <%= ticket[:subject] %>">
+                  <span class="fp-chat-ticket-id">#<%= ticket[:id] %></span>
+                  <span class="fp-chat-ticket-title"><%= ticket[:subject] %></span>
+                  <span class="fp-chat-ticket-status fp-chat-ticket-status-<%= ticket[:key] %>"><%= t("flightplan.home.ticket_status.#{ticket[:key]}") %></span>
+                </a>
+              </li>
+            <% end %>
+          </ul>
+          <% if tickets.size > visible_count %>
+            <button type="button" class="fp-chat-tickets-more" data-fp-chat-more-toggle aria-expanded="false">
+              <%= total > tickets.size ? t("flightplan.home.more_tickets_of", count: tickets.size - visible_count, total: total) : t("flightplan.home.more_tickets", count: tickets.size - visible_count) %>
+            </button>
+          <% end %>
+        <% end %>
+        <div class="fp-chat-recent" data-fp-chat-recent hidden>
+          <span class="fp-chat-recent-label"><%= t("flightplan.home.recent_tickets") %></span>
+          <ul class="fp-chat-ticket-list" data-fp-chat-recent-list></ul>
+        </div>
+      </div>
+    </nav>
     <iframe class="fp-home-frame"
             data-fp-home-frame
             hidden
