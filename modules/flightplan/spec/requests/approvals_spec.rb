@@ -121,6 +121,17 @@ RSpec.describe "Flightplan approvals", type: :rails_request do
       expect(response.body).to include("Ausgewählte zum Start freigeben")
     end
 
+    it "hides the button and rejects the approval while a question is open (OP#1709)" do
+      agent = create(:user, login: "agent-frager")
+      Flightplan::Question.create!(work_package: op_wp, author: agent, question: "Noch offen?", status: "open")
+      get "/flightplan/dashboard"
+      expect(response.body[/<tr data-wp="#{op_wp.id}"[^>]*>.*?<\/tr>/m]).not_to include("Starten freigeben", "fp-approve-check")
+      expect(response.body[/<tr data-wp="#{op_geplant.id}"[^>]*>.*?<\/tr>/m]).to include("Starten freigeben")
+      with_csrf { approve(single: op_wp.id, lock_versions: { op_wp.id => op_wp.lock_version }) }
+      expect(flash[:alert]).to include("1 abgelehnt", "Rückfrage ist noch offen")
+      expect(op_wp.reload.status).to eq(waiting)
+    end
+
     it "reports a mixed bulk result with counts and reasons" do
       stale_lock = op_wp.lock_version - 1
       with_csrf do

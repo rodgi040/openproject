@@ -198,6 +198,7 @@ de:
         not_found: nicht gefunden
         wrong_status: Status ist nicht „Geplant“ oder „Wartet auf Mensch“
         wrong_master: Master ist nicht „op“
+        open_question: Rückfrage ist noch offen
         conflict: Konflikt, das Paket wurde zwischenzeitlich geändert
         lock_missing: lockVersion fehlt
         no_status: Status „Startfreigabe“ fehlt

@@ -95,6 +95,7 @@ module Flightplan
       return :not_found unless work_package
       return :wrong_status unless Dashboard::APPROVABLE_STATUSES.include?(work_package.status&.name)
       return :wrong_master unless master(work_package) == "op"
+      return :open_question if Flightplan::Question.open.exists?(work_package_id: work_package.id)
       return :conflict unless work_package.lock_version == lock
 
       update(work_package, status)

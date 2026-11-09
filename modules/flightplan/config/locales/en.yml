@@ -198,6 +198,7 @@ en:
         not_found: not found
         wrong_status: Status is not Geplant or Wartet auf Mensch
         wrong_master: Master is not op
+        open_question: a question is still open
         conflict: Conflict, the package was changed in the meantime
         lock_missing: lockVersion missing
         no_status: Status Startfreigabe is missing
