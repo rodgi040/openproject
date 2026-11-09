@@ -8,6 +8,8 @@
 #   prefixes       -> Namen mit diesem Anfang
 #   types          -> Label wiederholt den OP-Typ: auf einer Karte dieses Typs kein Chip
 # Ein Name ohne Eintrag gehört zu "default".
+# Absicht (OP#1706, Entscheidung 5; Label-Konzept OP#1670): enhancement, bug, question und needs-triage zeigt keine
+# Karte als Chip, weil Spalte (Status, Warten) bzw. Typ sie abbilden. Die Labels bleiben am Ticket.
 version: 1
 default: projekt
 families:
