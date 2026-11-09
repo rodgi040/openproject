@@ -25,6 +25,7 @@ module Flightplan
         option: params[:option],
         text: params[:text]
       )
+      Rails.cache.delete(Flightplan::Dashboard.cache_key(User.current.id))
       # OP#1710: sichtbare Bestätigung mit gewählter Antwort und neuem Status (JSON für Dashboard-JS und Chat, sonst flash).
       summary = answer_summary(question)
       if request.format.json?
