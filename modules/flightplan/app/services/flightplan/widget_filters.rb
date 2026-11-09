@@ -5,8 +5,12 @@ module Flightplan
   # gefiltert wird im Browser (flightplan.js, fpWidgetFilters). Ein Eintrag ist ein Hash mit :bereich, :path
   # (Projekt-Identifier, eigener zuerst, dann die Vorfahren), :statuses und :labels.
   class WidgetFilters
-    ORDER = %w[overview attention questions board running betrieb].freeze
+    # OP#1722: Übersicht, Statusleiste (Laufende Agents + Betrieb als kleine Kacheln), Board, Aufmerksamkeit. „Rückfragen“
+    # steht in der Admin-Ansicht nicht mehr eigen, die Fragen stehen in „Aufmerksamkeit“ (OP#1708).
+    ORDER = %w[overview status board attention].freeze
     WIDE = %w[overview attention questions board].freeze
+    # Die Widgets in der Statusleiste (partial widgets/_status).
+    STATUS_ORDER = %w[running betrieb].freeze
     # Für Nicht-Admins (kein Dashboard, OP#1673/OP#1674).
     MEMBER_ORDER = %w[questions board].freeze
 

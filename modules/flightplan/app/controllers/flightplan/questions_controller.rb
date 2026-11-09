@@ -31,7 +31,7 @@ module Flightplan
       end
 
       nxt = question_scope.first
-      redirect_to return_path(nxt ? "q-#{nxt.id}" : "fp-widget-questions"), notice: t("flightplan.questions.answered")
+      redirect_to return_path(nxt ? "q-#{nxt.id}" : (User.current.admin? ? "fp-widget-attention" : "fp-widget-questions")), notice: t("flightplan.questions.answered")
     rescue Flightplan::Error => error
       if request.format.json?
         render json: { ok: false, error: error.message }, status: :unprocessable_entity
@@ -89,14 +89,10 @@ module Flightplan
         .find(id)
     end
 
-    # Zurück an die Stelle, von der das Widget-Formular kam; die Dashboard-Seite nur für Admins.
+    # Zurück an die Stelle, von der das Formular kam. OP#1721: es gibt nur noch die Hauptseite; return_to=dashboard
+    # (alte Formulare) führt ebenfalls dorthin.
     def return_path(anchor)
-      options = { Flightplan::QuestionsWidget::PARAM => params[Flightplan::QuestionsWidget::PARAM].presence, anchor: }.compact
-      if params[:return_to] == "dashboard" && User.current.admin?
-        flightplan_dashboard_path(options)
-      else
-        root_path(options)
-      end
+      root_path({ Flightplan::QuestionsWidget::PARAM => params[Flightplan::QuestionsWidget::PARAM].presence, anchor: }.compact)
     end
   end
 end

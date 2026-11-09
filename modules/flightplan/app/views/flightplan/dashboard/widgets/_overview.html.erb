@@ -1,7 +1,7 @@
-<% dash_path = ->(**opts) { controller.is_a?(::HomescreenController) ? root_path(**opts) : flightplan_dashboard_path(**opts) } %>
+<% dash_path = ->(**opts) { main_app.root_path(**opts) } %>
 <% entries = @dashboard.tiles.flat_map { |tile| tile[:projects].map { |project| { bereich: tile[:label], path: project[:path], statuses: project[:statuses], labels: project[:labels] } } } %>
 <% filters = Flightplan::WidgetFilters.new(entries, tree: @dashboard.project_tree, status_order: @dashboard.status_order) %>
-<%= render layout: "flightplan/dashboard/widget", locals: { key: "overview", title: t("flightplan.dashboard.tiles.title"), title_id: "fp-dash-tiles-title", filters: } do %>
+<%= render layout: "flightplan/dashboard/widget", locals: { key: "overview", title: t("flightplan.dashboard.tiles.title"), title_id: "fp-dash-tiles-title", filters:, collapsible: true, collapsed_default: true } do %>
   <div class="fp-dash-grid">
     <% @dashboard.tiles.each do |tile| %>
       <% key = tile[:key] %>
@@ -16,7 +16,7 @@
           <div data-stat="blocked"><dt><%= t("flightplan.dashboard.tiles.blocked") %></dt>
             <dd><span class="fp-dash-num"><%= key ? link_to(tile[:blocked], dash_path.(bereich: key, anchor: "fp-dash-attention-title"), data: { turbo: false }) : tile[:blocked] %></span></dd></div>
           <div data-stat="questions"><dt><%= t("flightplan.dashboard.tiles.questions") %></dt>
-            <dd><span class="fp-dash-num"><%= tile[:project_identifiers].any? ? link_to(tile[:questions], dash_path.(Flightplan::QuestionsWidget::PARAM => "bereich:#{tile[:label]}"), data: { turbo: false }) : tile[:questions] %></span></dd></div>
+            <dd><span class="fp-dash-num"><%# OP#1722: Link springt zu „Aufmerksamkeit“, gefiltert auf den Bereich (Rückfragen stehen dort). %><%= tile[:project_identifiers].any? && key ? link_to(tile[:questions], dash_path.(bereich: key, anchor: "fp-dash-attention-title"), data: { turbo: false }) : tile[:questions] %></span></dd></div>
           <div data-stat="agents"><dt><%= t("flightplan.dashboard.tiles.agents") %></dt>
             <dd><% if tile[:agents].nil? %><span class="fp-dash-off"><%= t("flightplan.dashboard.not_active") %></span><% else %><span class="fp-dash-num"><%= link_to(tile[:agents], "#fp-tile-agents") %></span><% end %></dd></div>
         </dl>

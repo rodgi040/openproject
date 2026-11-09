@@ -20,11 +20,13 @@
     <% groups.each do |group| %>
       <fieldset data-fp-label-group="<%= group[:key] %>" aria-label="<%= group[:title] || t("flightplan.widgets.labels") %>">
         <% if group[:title] %><legend><%= group[:title] %></legend><% end %>
+        <% selected_names = Array(group[:labels]).select { |label| label[:selected] }.map { |label| label[:name] } %>
         <% group[:names].each do |name| %>
-          <label class="fp-widget-label-option"><input type="checkbox" value="<%= name %>"> <%= name %></label>
+          <label class="fp-widget-label-option"><input type="checkbox" value="<%= name %>"<%= " checked" if selected_names.include?(name) %>> <%= name %></label>
         <% end %>
       </fieldset>
     <% end %>
   </div>
 </details>
+<span class="fp-active-labels" data-fp-active-labels aria-label="<%= t("flightplan.widgets.labels") %>"></span>
 <% end %>

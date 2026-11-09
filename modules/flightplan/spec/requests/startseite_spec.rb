@@ -80,9 +80,10 @@ RSpec.describe "Flightplan Startseite", :skip_csrf,
       expect(header[/frame-src[^;]*/].to_s).to include("http://localhost:8092")
     end
 
-    it "shows the same layout on /flightplan/dashboard" do
+    it "sends /flightplan/dashboard to the main page (OP#1721)" do
       get "/flightplan/dashboard"
-      expect(response).to have_http_status(:ok)
+      expect(response).to redirect_to("/")
+      get "/"
       expect(content.at_css("#fp-home > .fp-home-main #fp-dashboard")).to be_present
       expect(content.at_css("#fp-home > .fp-home-chat iframe[data-fp-home-frame]")).to be_present
     end
@@ -120,7 +121,7 @@ RSpec.describe "Flightplan Startseite", :skip_csrf,
       expect_no_upstream_blocks
     end
 
-    it "keeps the dashboard page itself admin-only" do
+    it "keeps the old dashboard address admin-only" do
       get "/flightplan/dashboard"
       expect(response).to have_http_status(:forbidden)
     end

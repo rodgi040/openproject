@@ -13,8 +13,9 @@ module Flightplan
 
     layout "global"
 
+    # OP#1721: kein eigener Menüeintrag mehr; die Hauptseite ist markiert.
     current_menu_item [:index, :create] do
-      :flightplan_dashboard
+      :home
     end
 
     def index; end
@@ -27,7 +28,7 @@ module Flightplan
         flash_result(Flightplan::Approvals.call(user: User.current, entries:))
         Rails.cache.delete(Flightplan::Dashboard.cache_key(User.current.id))
       end
-      redirect_to flightplan_dashboard_path(bereich: bereich_param)
+      redirect_to root_path(bereich: bereich_param) # OP#1721
     end
 
     private

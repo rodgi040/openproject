@@ -69,7 +69,7 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
     current_user { admin }
 
     it "lists exactly the packages that need attention, grouped by Bereich" do
-      get "/flightplan/dashboard"
+      get "/"
       expect(response).to have_http_status(:ok), response.body
 
       ada_table = response.body[/data-bereich-table="ADA MAIN">.*?<\/table>/m]
@@ -84,36 +84,36 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
     end
 
     it "links every row to the Arbeitsplatz page and shows the age" do
-      get "/flightplan/dashboard"
+      get "/"
       expect(response.body).to include(%(href="/flightplan/work_packages/#{waiting_wp.id}"))
       row = response.body[/<tr data-wp="#{stale_wp.id}"[^>]*>.*?<\/tr>/m]
       expect(row).to include("9 T")
     end
 
     it "sorts each group by age, oldest first" do
-      get "/flightplan/dashboard"
+      get "/"
       table = response.body[/data-bereich-table="ADA MAIN">.*?<\/table>/m]
       expect(table.index("Wartet Eins")).to be < table.index("Start Drei")
     end
 
     it "filters by Bereich" do
-      get "/flightplan/dashboard", params: { bereich: "nuova-ai-solutions" }
+      get "/", params: { bereich: "nuova-ai-solutions" }
       attention = response.body[/id="fp-widget-attention".*?<\/section>/m]
       expect(attention).to include("Frage Zwei")
       expect(attention).not_to include("Wartet Eins")
-      get "/flightplan/dashboard", params: { bereich: "nuovagen" }
+      get "/", params: { bereich: "nuovagen" }
       expect(response).to have_http_status(:ok)
       expect(response.body).to include("fp-dash-empty")
     end
 
     it "names the Bereich in the empty state" do
-      get "/flightplan/dashboard", params: { bereich: "nuovagen" }
+      get "/", params: { bereich: "nuovagen" }
       expect(response.body[/id="fp-dash-empty">(.*?)<\/p>/m, 1]).to eq("Nichts offen in NuovaGen")
       expect(response.body).not_to include("fp-unknown-bereich")
     end
 
     it "wraps the attention table in a scroll container for narrow screens" do
-      get "/flightplan/dashboard"
+      get "/"
       expect(response.body).to match(/<div class="fp-dash-scroll">\s*<table class="fp-dash-table"/)
       css = File.read(File.expand_path("../../app/assets/flightplan/flightplan.css", __dir__))
       expect(css[/\.fp-dash-scroll \{[^}]*\}/m]).to include("overflow-x: auto")
@@ -121,7 +121,7 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
     end
 
     it "hints at an unknown Bereich key, escaped, and shows all areas" do
-      get "/flightplan/dashboard", params: { bereich: "<b>x</b>'" }
+      get "/", params: { bereich: "<b>x</b>'" }
       expect(response).to have_http_status(:ok)
       hint = response.body[/id="fp-unknown-bereich"[^>]*>(.*?)<\/p>/m, 1]
       expect(hint).to include("Unbekannter Bereich „")
@@ -132,13 +132,13 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
     end
 
     it "escapes ticket titles" do
-      get "/flightplan/dashboard"
+      get "/"
       expect(response.body).not_to include("<script>alert(1)</script>")
       expect(response.body).to include("&lt;script&gt;alert(1)&lt;/script&gt;")
     end
 
     it "shows projects, open, blocked, questions and agents per Bereich, with links" do
-      get "/flightplan/dashboard"
+      get "/"
       tile = response.body[/data-bereich-tile="ADA MAIN">.*?<\/article>/m]
       expect(tile).to include("Dash Ada")
       expect(tile).to match(%r{data-stat="projects".*?fp-dash-num">.*?>1</a>}m)
@@ -146,11 +146,11 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
       expect(tile).to match(%r{data-stat="blocked".*?>1</a>}m)
       expect(tile).to match(%r{data-stat="questions".*?>0</a>}m)
       expect(tile).to match(%r{data-stat="agents".*?nicht aktiv}m)
-      expect(tile).to include('href="/flightplan/dashboard?board%5Bbereich%5D=ada-main#fp-widget-board"')
-      expect(tile).to include('href="/flightplan/dashboard?bereich=ada-main#fp-dash-attention-title"')
+      expect(tile).to include('href="/?board%5Bbereich%5D=ada-main#fp-widget-board"')
+      expect(tile).to include('href="/?bereich=ada-main#fp-dash-attention-title"')
       other = response.body[/data-bereich-tile="Nuova AI Solutions">.*?<\/article>/m]
       expect(other).to match(%r{data-stat="questions".*?>1</a>}m)
-      expect(other).to include("/flightplan/dashboard?rueckfragen=bereich%3ANuova+AI+Solutions")
+      expect(other).to include('href="/?bereich=nuova-ai-solutions#fp-dash-attention-title"') # OP#1722
       expect(response.body[/data-bereich-tile="Ohne Bereich">.*?<\/article>/m]).not_to include("?bereich=", "&amp;bereich=")
     end
 
@@ -158,18 +158,18 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
       # Status vor 5 Tagen gewechselt, danach nur ein Kommentar (updated_at ist frisch)
       backdate(waiting_wp, 5.days.ago)
       waiting_wp.update_columns(updated_at: 1.minute.ago)
-      get "/flightplan/dashboard"
+      get "/"
       row = response.body[/<tr data-wp="#{waiting_wp.id}"[^>]*>.*?<\/tr>/m]
       expect(row).to include("5 T")
     end
 
     it "uses one query for the status history of all candidates" do
-      get "/flightplan/dashboard"
+      get "/"
       Rails.cache.clear
       queries = []
       # Nur die Statushistorie der Aufmerksamkeit (previous_status_id); das Board-Widget (OP#1674) fragt „Fertig“ eigens ab.
       callback = ->(*, payload) { queries << payload[:sql] if payload[:sql].include?("LAG(") && payload[:sql].include?("previous_status_id") }
-      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { get "/flightplan/dashboard" }
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { get "/" }
       expect(queries.size).to eq(1)
     end
 
@@ -194,7 +194,7 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
         note(alarm, "Start nicht bestätigt.\n<!-- fp-op-alarm:start:#{alarm.id} -->")
         note(fallback, "ada-dispatch: Start fehlgeschlagen (boom). Bitte prüfen.")
         note(old, "<!-- fp-op-alarm:start:#{old.id} -->", at: 20.days.ago)
-        get "/flightplan/dashboard"
+        get "/"
         expect(row(alarm.id)).to include("Start fehlgeschlagen")
         expect(row(fallback.id)).to include("Start fehlgeschlagen")
         expect(row(old.id)).not_to include("fp-dash-reason")
@@ -205,7 +205,7 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
         loose_wp.journals.destroy_all
         backdate(alarm, 1.day.ago)
         note(alarm, "<!-- fp-op-alarm:start:#{alarm.id} -->", user: agent)
-        get "/flightplan/dashboard"
+        get "/"
         expect(row(alarm.id)).not_to include("Start fehlgeschlagen")
       end
 
@@ -216,7 +216,7 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
         note(earlier, "<!-- fp-op-alarm:start:#{earlier.id} -->")
         User.execute_as(admin) { earlier.reload.update!(status: waiting) }
         expect(earlier.journals.count).to eq(2)
-        get "/flightplan/dashboard"
+        get "/"
         expect(row(earlier.id)).not_to include("Start fehlgeschlagen")
         expect(row(earlier.id)).to include("Wartet auf Mensch")
       end
@@ -227,21 +227,21 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
         ensure_status("Geplant")
         startfreigabe.update!(name: "Startfreigabe neu")
         Rails.cache.clear
-        get "/flightplan/dashboard"
+        get "/"
         expect(response).to have_http_status(:ok)
         expect(response.body).to include("data-fp-missing-status=\"Startfreigabe\"", "Status „Startfreigabe“ nicht gefunden")
         expect(Rails.cache.read(Flightplan::Dashboard::STATUS_IDS_CACHE_KEY)).to be_nil
         expect(Rails.cache.read(Flightplan::Dashboard.cache_key(admin.id))).to be_nil
         expect(Flightplan::Dashboard.check_report(user: admin)[:missing_statuses]).to eq(["Startfreigabe"])
         startfreigabe.update!(name: "Startfreigabe")
-        get "/flightplan/dashboard"
+        get "/"
         expect(response.body).not_to include("data-fp-missing-status")
         expect(Flightplan::Dashboard.check_report(user: admin)[:missing_statuses]).to eq([])
       end
     end
 
     it "keeps the age column on one line through the stylesheet, not inline" do
-      get "/flightplan/dashboard"
+      get "/"
       expect(response.body).to include('class="fp-dash-age"')
       expect(response.body).not_to match(/white-space/)
       expect(File.read(File.expand_path("../../app/assets/flightplan/flightplan.css", __dir__)))
@@ -256,7 +256,7 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
     end
 
     it "marks all host sources as not active when the export directory is empty" do
-      get "/flightplan/dashboard"
+      get "/"
       expect(response).to have_http_status(:ok)
       %w[health engine agents].each do |key|
         tile = response.body[/data-tile="#{key}">.*?<\/article>/m]
@@ -280,7 +280,7 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
           { "op" => plain_wp.id, "harness" => "codex" }, { "op" => "x<b>" }, "kaputt"
         ]
       ))
-      get "/flightplan/dashboard"
+      get "/"
       health = response.body[/data-tile="health">.*?<\/article>/m]
       engine = response.body[/data-tile="engine">.*?<\/article>/m]
       slots = response.body[/data-tile="agents">.*?<\/article>/m]
@@ -295,7 +295,7 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
     end
 
     it "has no external hosts in the page" do
-      get "/flightplan/dashboard"
+      get "/"
       body = Nokogiri::HTML(response.body).at_css("#fp-dashboard")
       expect(body).to be_present
       expect(body.to_html).not_to match(%r{(src|href)="https?://})
@@ -304,7 +304,7 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
     it "shows a future timestamp as not active" do
       File.write(File.join(export_dir, "snapshot.json"), JSON.generate("erzeugt_am" => 3.days.from_now.utc.iso8601))
       File.write(File.join(export_dir, "status.json"), JSON.generate("heartbeat" => { "epoch" => 10**40 }, "gesamt" => "gruen"))
-      get "/flightplan/dashboard"
+      get "/"
       expect(response).to have_http_status(:ok)
       expect(response.body[/data-tile="engine">.*?<\/article>/m]).to include("Zeit in der Zukunft")
       expect(response.body[/data-tile="health">.*?<\/article>/m]).to include("Zeit in der Zukunft")
@@ -316,14 +316,22 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
       expect(response.body).to include("fp-approvals-empty", "Aufmerksamkeitstabelle")
     end
 
-    it "adds the menu entry ADA Dashboard" do
+    # OP#1721: eine Seite statt zwei, kein eigener Menüeintrag; die alte Adresse leitet um und behält die Parameter.
+    it "has no menu entry ADA Dashboard and marks the main page" do
       get "/flightplan/work_packages/#{plain_wp.id}"
-      expect(response.body).to include("ADA Dashboard")
-      expect(response.body).to include('data-name="flightplan_dashboard"', "/flightplan/dashboard\"")
+      expect(response.body).not_to include('data-name="flightplan_dashboard"')
+      expect(Redmine::MenuManager.items(:global_menu).map { |item| item.name.to_s }).not_to include("flightplan_dashboard")
+    end
+
+    it "redirects /flightplan/dashboard to the main page and keeps the query" do
+      get "/flightplan/dashboard"
+      expect(response).to redirect_to("/")
+      get "/flightplan/dashboard", params: { bereich: "ada-main", board: { projects: "x" } }
+      expect(response).to redirect_to("/?bereich=ada-main&board%5Bprojects%5D=x")
     end
 
     it "changes nothing" do
-      expect { get "/flightplan/dashboard" }.not_to change { [WorkPackage.maximum(:updated_at), Journal.count] }
+      expect { get "/" }.not_to change { [WorkPackage.maximum(:updated_at), Journal.count] }
     end
   end
 
@@ -333,7 +341,7 @@ RSpec.describe "Flightplan dashboard", :skip_csrf, type: :rails_request do
 
     current_user { member }
 
-    it "answers 403 and hides the menu entry" do
+    it "answers 403 on the old dashboard address and approvals page" do
       get "/flightplan/dashboard"
       expect(response).to have_http_status(:forbidden)
       get "/flightplan/approvals"

@@ -1,21 +1,28 @@
 <%# OP#1672: Hülle eines Insel-Widgets. Locals: key, title, filters (Flightplan::WidgetFilters), optional title_id und
     selected_scope (vorausgewählter Wert im Projekt-/Bereichsfilter, OP#1673). OP#1674, optional: total (Zahl im Kopf, wenn
     nicht alle Einträge gerendert sind), collapsible (Knopf zum Einklappen, im Browser gemerkt), head (HTML im Kopf), tools
-    (weitere Filter), label_groups (statt der Gruppen aus filters), label_style ("chips": Labels als Chips statt Liste). %>
+    (weitere Filter), label_groups (statt der Gruppen aus filters), label_style ("chips": Labels als Chips statt Liste).
+    OP#1722, optional: collapsed_default (startet eingeklappt, OP#1722), compact (kleine Kachel: nur Kopf sichtbar, Suche, Filter und Inhalt in <details>), summary (Kurztext im Kopf). %>
 <% title_id = local_assigns[:title_id] || "fp-widget-#{key}-title" %>
 <% selected_scope = local_assigns[:selected_scope] %>
 <% wide = Flightplan::WidgetFilters::WIDE.include?(key) %>
 <% total = local_assigns[:total] %>
 <% collapsible = local_assigns[:collapsible] %>
-<section class="fp-widget<%= " fp-widget--wide" if wide %>" id="fp-widget-<%= key %>" data-fp-widget="<%= key %>" aria-labelledby="<%= title_id %>">
+<% compact = local_assigns[:compact] %>
+<% collapsed_default = local_assigns[:collapsed_default] %>
+<section class="fp-widget<%= " fp-widget--wide" if wide %><%= " is-collapsed" if collapsed_default %><%= " fp-widget--compact" if compact %>" id="fp-widget-<%= key %>" data-fp-widget="<%= key %>"<%= " data-fp-collapsed-default" if collapsed_default %> aria-labelledby="<%= title_id %>">
   <header class="fp-widget-head">
     <% if collapsible %>
-      <button type="button" class="fp-widget-toggle" data-fp-widget-toggle aria-expanded="true" aria-controls="fp-widget-<%= key %>-content" title="<%= t("flightplan.widgets.collapse") %>" aria-label="<%= t("flightplan.widgets.collapse_named", title:) %>" data-fp-label-open="<%= t("flightplan.widgets.collapse") %>" data-fp-label-closed="<%= t("flightplan.widgets.expand") %>"></button>
+      <button type="button" class="fp-widget-toggle" data-fp-widget-toggle aria-expanded="<%= collapsed_default ? "false" : "true" %>" aria-controls="fp-widget-<%= key %>-content" title="<%= t("flightplan.widgets.collapse") %>" aria-label="<%= t("flightplan.widgets.collapse_named", title:) %>" data-fp-label-open="<%= t("flightplan.widgets.collapse") %>" data-fp-label-closed="<%= t("flightplan.widgets.expand") %>"></button>
     <% end %>
     <h2 id="<%= title_id %>"><%= title %></h2>
     <%= tag.span(total || filters.count, class: "fp-widget-count", data: { fp_widget_count: "", fp_total: total }, title: t("flightplan.widgets.count")) %>
     <%= local_assigns[:head] %>
   </header>
+  <% if compact %>
+  <details class="fp-widget-fold" data-fp-widget-fold>
+    <summary><%= local_assigns[:summary] %><span class="fp-widget-fold-label"><%= t("flightplan.widgets.details") %></span></summary>
+  <% end %>
   <div class="fp-widget-content" id="fp-widget-<%= key %>-content">
   <div class="fp-widget-tools" data-fp-widget-tools role="search" aria-label="<%= t("flightplan.widgets.tools", title:) %>">
     <input type="search" class="fp-widget-search" data-fp-filter="text" placeholder="<%= t("flightplan.widgets.search") %>" aria-label="<%= t("flightplan.widgets.search_in", title:) %>">
@@ -53,4 +60,7 @@
     <p class="fp-widget-none fp-dash-hint" data-fp-widget-none hidden><%= t("flightplan.widgets.none") %></p>
   </div>
   </div>
+  <% if compact %>
+  </details>
+  <% end %>
 </section>

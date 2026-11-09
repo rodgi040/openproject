@@ -1,5 +1,7 @@
-<% dash_path = ->(**opts) { controller.is_a?(::HomescreenController) ? root_path(**opts) : flightplan_dashboard_path(**opts) } %>
+<% dash_path = ->(**opts) { main_app.root_path(**opts) } %>
 <% groups = @dashboard.groups %>
+<%# OP#1708: offene Rückfragen je Paket; die Zeile zeigt die Frage samt Antwortformular (Partial question_body). %>
+<% questions_by_wp = (@questions_widget&.rows || []).group_by { |question| question[:work_package_id] } %>
 <% entries = groups.flat_map { |group| group[:rows].map { |row| { bereich: row[:bereich], path: row[:project_path], statuses: [row[:status]], labels: row[:labels] } } } %>
 <% filters = Flightplan::WidgetFilters.new(entries, tree: @dashboard.project_tree, status_order: @dashboard.status_order) %>
 <%= render layout: "flightplan/dashboard/widget", locals: { key: "attention", title: t("flightplan.dashboard.attention.title"), title_id: "fp-dash-attention-title", filters: } do %>
@@ -23,11 +25,14 @@
   </nav>
 
   <% any_approvable = @approval_state == :ok && groups.any? { |group| group[:rows].any? { |row| row[:approvable] } } %>
+  <%# OP#1708: Das Freigabeformular ist leer und wird über das Attribut form= bedient, weil die Zeilen jetzt eigene
+      Antwortformulare enthalten (Formulare dürfen nicht verschachtelt sein). %>
   <%= form_with url: flightplan_approvals_create_path, method: :post, id: "fp-approve-form", local: true, data: { turbo: false } do %>
-  <%= hidden_field_tag :bereich, @dashboard.selected_bereich, id: nil %>
+    <%= hidden_field_tag :bereich, @dashboard.selected_bereich, id: nil %>
+  <% end %>
   <% if any_approvable %>
     <p class="fp-dash-bulk">
-      <button type="submit" class="fp-approve-bulk" id="fp-approve-bulk"><%= t("flightplan.approvals.bulk") %></button>
+      <button type="submit" form="fp-approve-form" class="fp-approve-bulk" id="fp-approve-bulk"><%= t("flightplan.approvals.bulk") %></button>
       <span class="fp-dash-hint"><%= t("flightplan.approvals.hint") %></span>
     </p>
   <% end %>
@@ -65,6 +70,16 @@
               <% if row[:labels].present? %>
                 <span class="fp-dash-labels"><% row[:labels].each do |name| %><span class="fp-dash-label"><%= name %></span><% end %></span>
               <% end %>
+              <% if row[:reasons].map(&:to_s).include?("question") %>
+                <% questions_by_wp[row[:id]]&.each do |question| %>
+                  <%= tag.div(id: "q-#{question[:id]}", class: "fp-q fp-q--inline",
+                              data: { fp_question: question[:id], fp_answered_text: t("flightplan.questions.widget.answered"),
+                                      fp_sending_text: t("flightplan.questions.widget.sending"),
+                                      fp_failed_text: t("flightplan.questions.widget.failed") }) do %>
+                    <%= render "flightplan/dashboard/question_body", row: question, return_to: "home", selected_scope: nil, compact: true %>
+                  <% end %>
+                <% end %>
+              <% end %>
             </td>
             <td>
               <span class="fp-badge" data-fp-status="<%= row[:status] %>"><%= row[:status] %></span>
@@ -77,9 +92,9 @@
             <% if any_approvable %>
               <td class="fp-dash-approve">
                 <% if row[:approvable] %>
-                  <%= check_box_tag "ids[]", row[:id], false, id: "fp-ap-#{row[:id]}", class: "fp-approve-check", "aria-label": t("flightplan.approvals.select") %>
-                  <%= hidden_field_tag "lock_versions[#{row[:id]}]", row[:lock_version], id: nil %>
-                  <button type="submit" name="single" value="<%= row[:id] %>" class="fp-approve-one"><%= t("flightplan.approvals.button") %></button>
+                  <%= check_box_tag "ids[]", row[:id], false, id: "fp-ap-#{row[:id]}", class: "fp-approve-check", form: "fp-approve-form", "aria-label": t("flightplan.approvals.select") %>
+                  <%= hidden_field_tag "lock_versions[#{row[:id]}]", row[:lock_version], id: nil, form: "fp-approve-form" %>
+                  <button type="submit" form="fp-approve-form" name="single" value="<%= row[:id] %>" class="fp-approve-one"><%= t("flightplan.approvals.button") %></button>
                 <% end %>
               </td>
             <% end %>
@@ -89,6 +104,5 @@
     </table>
     </div>
     </div>
-  <% end %>
   <% end %>
 <% end %>

@@ -162,12 +162,12 @@ RSpec.describe "Flightplan board widget", :skip_csrf, type: :rails_request do
   describe "as admin" do
     current_user { admin }
 
-    %w[/ /flightplan/dashboard].each do |path|
-      it "shows the board as a wide widget after the questions, with columns, search and filter (A, #{path})" do
+    %w[/].each do |path|
+      it "shows the board as a wide widget after the status bar, with columns, search and filter (A, #{path})" do
         get path
         expect(response).to have_http_status(:ok)
         keys = page.css("#fp-home .fp-home-main .fp-widgets > .fp-widget").map { |node| node["data-fp-widget"] }
-        expect(keys).to eq(%w[overview attention questions board running betrieb])
+        expect(keys).to eq(%w[overview board attention])
         expect(widget["class"]).to include("fp-widget--wide")
         expect(page.at_css("#content-body > #fp-home")).to be_present
 
@@ -206,7 +206,7 @@ RSpec.describe "Flightplan board widget", :skip_csrf, type: :rails_request do
 
       names = Redmine::MenuManager.items(:global_menu).map { |item| item.name.to_s }
       expect(names).not_to include("flightplan")
-      expect(names).to include("flightplan_dashboard")
+      expect(names).not_to include("flightplan_dashboard") # OP#1721
       get "/"
       expect(response.body).not_to include('href="/flightplan/board', 'href="/flightplan"')
     end

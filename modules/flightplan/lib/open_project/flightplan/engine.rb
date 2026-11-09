@@ -10,13 +10,7 @@ module OpenProject::Flightplan
              author_url: "https://github.com/rodgi040/openproject",
              bundled: true do
       # OP#1674: kein Eintrag „Flightplan“ mehr; das Board ist ein Widget der Startseite.
-      menu :global_menu,
-           :flightplan_dashboard,
-           { controller: "/flightplan/dashboard", action: :index },
-           caption: :"flightplan.dashboard.menu",
-           after: :home,
-           icon: :graph,
-           if: Proc.new { User.current.admin? }
+      # OP#1721: auch kein Eintrag „ADA Dashboard“ mehr; die Hauptseite (/) ist die eine Seite.
     end
 
     add_api_endpoint "API::V3::Root" do
