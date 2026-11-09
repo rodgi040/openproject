@@ -60,6 +60,8 @@ module Flightplan
     end
 
     # Labels, die als Chip auf eine Karte gehören: ohne Familien mit card: false und ohne Label, das den Typ wiederholt.
+    # Absicht (OP#1706, Entscheidung 5; Label-Konzept OP#1670): needs-triage, question, bug und enhancement erscheinen
+    # nie als Chip, weil Spalte (Status, Warten) bzw. Typ (Art) sie schon abbilden. Kein Fehler, nicht „nachrüsten“.
     def card_labels(names, type_name)
       names.reject do |name|
         !family_for(name)[:card] || (type_name.present? && data[:types][name.to_s] == type_name.to_s)

@@ -28,6 +28,7 @@ module OpenProject::Flightplan
       OpenProject::Flightplan::Hooks
       OpenProject::Flightplan::CspHook
       ::HomescreenController.include OpenProject::Flightplan::Startseite
+      ::SearchController.include OpenProject::Flightplan::SucheNachId
       require "open_project/flightplan/no_upsell"
       OpenProject::Flightplan::NoUpsell.apply!
     end
