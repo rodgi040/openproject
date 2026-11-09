@@ -25,16 +25,20 @@ module Flightplan
         option: params[:option],
         text: params[:text]
       )
+      Rails.cache.delete(Flightplan::Dashboard.cache_key(User.current.id))
+      # OP#1710: sichtbare Bestätigung mit gewählter Antwort und neuem Status (JSON für Dashboard-JS und Chat, sonst flash).
+      summary = answer_summary(question)
       if request.format.json?
-        render json: { ok: true, items: Flightplan::ChatQuestions.items(User.current) }
+        render json: { ok: true, answer: summary, items: Flightplan::ChatQuestions.items(User.current) }
         return
       end
 
       nxt = question_scope.first
-      redirect_to return_path(nxt ? "q-#{nxt.id}" : (User.current.admin? ? "fp-widget-attention" : "fp-widget-questions")), notice: t("flightplan.questions.answered")
+      redirect_to return_path(nxt ? "q-#{nxt.id}" : (User.current.admin? ? "fp-widget-attention" : "fp-widget-questions")),
+                  notice: summary[:message]
     rescue Flightplan::Error => error
       if request.format.json?
-        render json: { ok: false, error: error.message }, status: :unprocessable_entity
+        render json: { ok: false, error: error.message }, status: error_status(error)
         return
       end
 
@@ -42,6 +46,30 @@ module Flightplan
     end
 
     private
+
+    # OP#1710: „Beantwortet: <Option/Freitext-Anfang> – #<id>, Status jetzt <Status>“.
+    def answer_summary(question)
+      work_package = question.work_package.reload
+      given = question.chosen_option.presence || question.answer.to_s
+      status = work_package.status&.name.to_s
+      {
+        id: question.id,
+        work_package_id: work_package.id,
+        option: question.chosen_option,
+        text: question.answer,
+        status:,
+        message: t("flightplan.questions.answered_summary",
+                   answer: given.squish.truncate(60), id: work_package.id, status: status.presence || "–")
+      }
+    end
+
+    def error_status(error)
+      case error
+      when Flightplan::Questions::Answer::Forbidden then :forbidden
+      when Flightplan::Questions::Answer::AlreadyAnswered then :conflict
+      else :unprocessable_entity
+      end
+    end
 
     def find_project
       key = params[:project_id].presence || params[:project].presence

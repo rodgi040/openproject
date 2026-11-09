@@ -989,6 +989,10 @@ a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addon
   color: var(--fgColor-success, #1a7f37);
 }
 
+.fp-q-note.is-done {
+  font-weight: 600;
+}
+
 .fp-q-note.is-error {
   color: var(--fgColor-danger, #d1242f);
 }

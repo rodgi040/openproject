@@ -19,6 +19,7 @@ en:
       free_text: Free text
       submit: Answer
       answered: Answered.
+      answered_summary: "Answered: %{answer} – #%{id}, status now %{status}"
       answer_by: Answer by %{user}
       widget:
         title: Questions
