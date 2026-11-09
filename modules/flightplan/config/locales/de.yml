@@ -19,6 +19,7 @@ de:
       free_text: Freitext
       submit: Antworten
       answered: Beantwortet.
+      answered_summary: "Beantwortet: %{answer} – #%{id}, Status jetzt %{status}"
       answer_by: Antwort von %{user}
       widget:
         title: Rückfragen

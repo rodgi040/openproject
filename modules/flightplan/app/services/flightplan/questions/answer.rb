@@ -3,6 +3,10 @@
 module Flightplan
   module Questions
     class Answer
+      # OP#1710: eigene Fehlerklassen, damit der Controller 403 und 409 statt 422 melden kann.
+      class Forbidden < Error; end
+      class AlreadyAnswered < Error; end
+
       def self.call(user:, question:, option: nil, text: nil)
         new(user:, question:, option:, text:).call
       end
@@ -15,7 +19,7 @@ module Flightplan
       end
 
       def call
-        raise Error, "Antworten ist der Rolle Mensch oder einem Admin vorbehalten" unless allowed?
+        raise Forbidden, "Antworten ist der Rolle Mensch oder einem Admin vorbehalten" unless allowed?
         raise Error, "Option oder Freitext fehlt" if @option.blank? && @text.blank?
         if @option.present? && @question.options.any? && !@question.options.include?(@option)
           raise Error, "Option unbekannt"
@@ -23,7 +27,7 @@ module Flightplan
 
         Question.transaction do
           @question.lock!
-          raise Error, "Die Frage ist bereits beantwortet" unless @question.open?
+          raise AlreadyAnswered, "Die Frage ist bereits beantwortet" unless @question.open?
           @question.work_package.reload
           @question.update!(
             status: "answered",

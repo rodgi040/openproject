@@ -212,6 +212,20 @@
   });
 })();
 
+// OP#1710: Rückmeldung an das Chat-iframe nach einer Antwort (postMessage fp:answered an die Chat-Origin).
+function fpAnsweredMessage(id, response, payload) {
+  var answer = (payload && payload.answer) || {};
+  var ok = !!(response && response.ok && payload && payload.ok);
+  return {
+    type: "fp:answered",
+    questionId: Number(id),
+    ok: ok,
+    status: ok ? String(answer.status || "") : "",
+    answer: ok ? String(answer.option || answer.text || "") : "",
+    error: ok ? "" : String((payload && payload.error) || (response ? "HTTP " + response.status : "Netzwerkfehler"))
+  };
+}
+
 (function () {
   var panel = document.getElementById("fp-chat-panel");
   var toggle = panel && panel.querySelector("[data-fp-chat-toggle]");
@@ -331,11 +345,15 @@
       body: bodyParams.toString()
     }).then(function (response) {
       return response.json().catch(function () { return {}; }).then(function (payload) {
+        // OP#1710: Rückmeldung an den Chat (fp:answered), auch im Fehlerfall.
+        post(fpAnsweredMessage(data.id, response, payload));
         if (!response.ok || !payload.ok) return;
         questions = payload.items || [];
         sendState();
       });
-    }).catch(function () {});
+    }).catch(function () {
+      post(fpAnsweredMessage(data.id, null, {}));
+    });
   });
 
   setOpen(window.localStorage.getItem(openKey) === "1");
@@ -443,12 +461,16 @@ function fpMountChat(root, frame) {
       body: bodyParams.toString()
     }).then(function (response) {
       return response.json().catch(function () { return {}; }).then(function (payload) {
+        // OP#1710: Rückmeldung an den Chat (fp:answered), auch im Fehlerfall.
+        post(fpAnsweredMessage(data.id, response, payload));
         if (!response.ok || !payload.ok) return;
         questions = payload.items || [];
         sendState();
-        fpMarkAnswered(data.id);
+        fpMarkAnswered(data.id, payload.answer && payload.answer.message);
       });
-    }).catch(function () {});
+    }).catch(function () {
+      post(fpAnsweredMessage(data.id, null, {}));
+    });
   });
 
   window.addEventListener("fp:questions-changed", function (event) {
@@ -734,7 +756,7 @@ function fpWidgetFilters(widget) {
 
 // OP#1673: Antwort im Widget „Rückfragen“ ohne Neuladen. Ohne Skript schickt das Formular normal ab und die Seite kommt
 // zurück. Nach der Antwort bekommt der Chat die neue Liste (fp:questions).
-function fpMarkAnswered(id) {
+function fpMarkAnswered(id, message) {
   document.querySelectorAll("[data-fp-question='" + String(id).replace(/\D/g, "") + "']").forEach(function (item) {
     item.classList.add("is-answered");
     var form = item.querySelector("form[data-fp-question-form]");
@@ -742,8 +764,11 @@ function fpMarkAnswered(id) {
     var note = item.querySelector("[data-fp-question-note]");
     if (note) {
       note.classList.remove("is-error");
-      note.textContent = item.getAttribute("data-fp-answered-text") || "";
+      note.classList.add("is-done");
+      note.setAttribute("role", "status");
+      note.textContent = message || item.getAttribute("data-fp-answered-text") || "";
       note.hidden = false;
+      if (typeof note.scrollIntoView === "function") note.scrollIntoView({ block: "nearest" });
     }
   });
 }
@@ -798,8 +823,12 @@ function fpMarkAnswered(id) {
     if (submitter && submitter.name) body.set(submitter.name, submitter.value);
     var buttons = form.querySelectorAll("button");
     buttons.forEach(function (button) { button.disabled = true; });
+    // OP#1710: der gedrückte Knopf zeigt „Wird gesendet …“.
+    var originalLabel = submitter ? submitter.textContent : null;
+    if (submitter && item) submitter.textContent = item.getAttribute("data-fp-sending-text") || originalLabel;
     if (note) {
       note.classList.remove("is-error");
+      note.setAttribute("role", "status");
       note.textContent = item.getAttribute("data-fp-sending-text") || "";
       note.hidden = false;
     }
@@ -812,14 +841,16 @@ function fpMarkAnswered(id) {
     }).then(function (response) {
       return response.json().catch(function () { return {}; }).then(function (payload) {
         if (!response.ok || !payload.ok) throw { fpMessage: payload.error };
-        fpMarkAnswered(form.getAttribute("data-fp-question-form"));
+        fpMarkAnswered(form.getAttribute("data-fp-question-form"), payload.answer && payload.answer.message);
         window.dispatchEvent(new CustomEvent("fp:questions-changed", { detail: { items: payload.items || [] } }));
       });
     }).catch(function (error) {
       buttons.forEach(function (button) { button.disabled = false; });
+      if (submitter && originalLabel !== null) submitter.textContent = originalLabel;
       if (!note) return;
       note.textContent = (error && error.fpMessage) || item.getAttribute("data-fp-failed-text") || "";
       note.classList.add("is-error");
+      note.setAttribute("role", "alert");
       note.hidden = false;
     });
   });
