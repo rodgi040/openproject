@@ -105,11 +105,14 @@ en:
       run_kinds:
         claim: Claim
         start: Start
+    chat:
+      saved_as_comment: "Saved as a comment on #%{id} – it arrives when the agent next reads the ticket."
     home:
       main: ADA Dashboard
       chat: "Chat (T3 Code, Gandalf)"
       chat_admin_only: "The chat (T3 Code) is available to administrators only. Ask about a ticket in a comment on the ticket."
       tickets: "Running tickets"
+      opening: "Opening chat for #%{id} …"
       new_chat: "New chat"
       no_running_tickets: "No running tickets"
       recent_tickets: "Recently opened"

@@ -226,6 +226,40 @@ function fpAnsweredMessage(id, response, payload) {
   };
 }
 
+// OP#1711 Welle 2: Rückmeldung an den Chat nach einer Nachricht, die als Kommentar gespeichert wurde (fp:commented).
+// "Gespeichert" heißt nicht "zugestellt": ein Agent sieht den Kommentar erst beim nächsten Lesen.
+function fpCommentedMessage(wpId, clientId, response, payload) {
+  var ok = !!(response && response.ok && payload && payload.ok);
+  return {
+    type: "fp:commented",
+    wpId: Number(wpId),
+    clientId: String(clientId || ""),
+    ok: ok,
+    eventId: ok ? String(payload.event_id || "") : "",
+    message: ok ? String(payload.message || "") : "",
+    error: ok ? "" : String((payload && payload.error) || (response ? "HTTP " + response.status : "Netzwerkfehler"))
+  };
+}
+
+// OP#1711 Welle 2: neue Ereignisse an die bekannten anfügen, ohne Dubletten. Die Id trägt den Inhalt (c12-ab12cd34,
+// s12-3-4); der Teil vor dem "-" ist der Schlüssel der Zeile. Gleiche Id = Wiederholung; gleicher Schlüssel mit neuer
+// Id (OP fasst Journale zusammen, z. B. zweiter Statuswechsel im selben Journal) ersetzt die ältere Zeile.
+function fpMergeEvents(known, incoming) {
+  var byKey = {};
+  var order = [];
+  (known || []).concat(incoming || []).forEach(function (event) {
+    if (!event || !event.id) return;
+    var key = String(event.id).split("-")[0];
+    if (!(key in byKey)) order.push(key);
+    byKey[key] = event;
+  });
+  var merged = order.map(function (key) { return byKey[key]; });
+  merged.sort(function (a, b) {
+    return String(a.at).localeCompare(String(b.at)) || String(a.id).localeCompare(String(b.id), undefined, { numeric: true });
+  });
+  return merged.slice(-60);
+}
+
 (function () {
   var panel = document.getElementById("fp-chat-panel");
   var toggle = panel && panel.querySelector("[data-fp-chat-toggle]");
@@ -382,10 +416,70 @@ function fpMountChat(root, frame) {
     frame.contentWindow.postMessage(message, origin);
   }
 
+  // OP#1711 Welle 2: Ereignisse des offenen Tickets (Kommentare, Statuswechsel, Rückfragen). Das Modul fragt etwa alle
+  // 10 s nach und sendet den bekannten Stand als fp:events. Ereignisse sind nur Anzeige; die Id macht Wiederholungen
+  // und Neuladen idempotent.
+  var eventsFor = 0;
+  var eventList = [];
+  var eventCursor = { journal: 0, journal_at: "", question: 0, question_at: "" };
+  var eventsDisabled = false;
+  var eventsBusy = false;
+
+  function sendEvents() {
+    if (!eventsFor) return;
+    post({ type: "fp:events", wpId: eventsFor, events: eventList });
+  }
+
+  function pollEvents() {
+    var id = wp && Number(wp.id);
+    if (eventsDisabled || eventsBusy || !id || !frame || !frame.getAttribute("src")) return;
+    if (id !== eventsFor) {
+      eventsFor = id;
+      eventList = [];
+      eventCursor = { journal: 0, journal_at: "", question: 0, question_at: "" };
+    }
+    eventsBusy = true;
+    var query = "wp=" + id + (eventCursor.journal ? "&after=" + eventCursor.journal : "") +
+      (eventCursor.journal_at ? "&after_at=" + encodeURIComponent(eventCursor.journal_at) : "") +
+      (eventCursor.question ? "&after_question=" + eventCursor.question : "") +
+      (eventCursor.question_at ? "&after_question_at=" + encodeURIComponent(eventCursor.question_at) : "");
+    fetch("/flightplan/chat/events?" + query, { headers: { "Accept": "application/json" }, credentials: "same-origin" })
+      .then(function (response) {
+        if (response.status === 403) eventsDisabled = true;
+        return response.json().catch(function () { return {}; }).then(function (payload) {
+          return { ok: response.ok, payload: payload };
+        });
+      })
+      .then(function (result) {
+        eventsBusy = false;
+        if (!result.ok || !result.payload.ok || Number(result.payload.work_package_id) !== eventsFor) return;
+        var before = JSON.stringify(eventList);
+        eventList = fpMergeEvents(eventList, result.payload.events);
+        var cursor = result.payload.cursor || {};
+        eventCursor = {
+          journal: Number(cursor.journal) || eventCursor.journal,
+          journal_at: String(cursor.journal_at || eventCursor.journal_at || ""),
+          question: Number(cursor.question) || eventCursor.question,
+          question_at: String(cursor.question_at || eventCursor.question_at || "")
+        };
+        if (JSON.stringify(eventList) !== before || before === "[]") sendEvents();
+      })
+      .catch(function () {
+        eventsBusy = false;
+      });
+  }
+
   function sendState() {
     if (wp && wp.id) post({ type: "fp:context", wp: wp });
     post({ type: "fp:questions", items: questions });
+    sendEvents();
+    if (wp && Number(wp.id) !== eventsFor) pollEvents();
   }
+
+  window.setInterval(function () {
+    if (document.hidden) return;
+    pollEvents();
+  }, 10000);
 
   var offline = root.querySelector("[data-fp-chat-offline]");
   var reload = root.querySelector("[data-fp-chat-reload]");
@@ -447,6 +541,29 @@ function fpMountChat(root, frame) {
       sendState();
       return;
     }
+    if (data.type === "fp:comment") {
+      // OP#1711 Welle 2: Nachricht aus dem Thread wird Kommentar im Namen des angemeldeten Menschen (Session, CSRF).
+      var wpId = Number(data.wpId);
+      if (!wpId || typeof data.text !== "string") return;
+      fetch("/flightplan/chat/comments", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "X-CSRF-Token": root.dataset.csrf,
+          "Accept": "application/json",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({ wp: String(wpId), text: data.text.slice(0, 4000) }).toString()
+      }).then(function (response) {
+        return response.json().catch(function () { return {}; }).then(function (payload) {
+          post(fpCommentedMessage(wpId, data.clientId, response, payload));
+          if (response.ok && payload.ok) pollEvents();
+        });
+      }).catch(function () {
+        post(fpCommentedMessage(wpId, data.clientId, null, {}));
+      });
+      return;
+    }
     if (data.type !== "fp:answer" || !data.id) return;
     var bodyParams = new URLSearchParams();
     if (data.option) bodyParams.set("option", data.option);
@@ -466,7 +583,7 @@ function fpMountChat(root, frame) {
         if (!response.ok || !payload.ok) return;
         questions = payload.items || [];
         sendState();
-        fpMarkAnswered(data.id, payload.answer && payload.answer.message);
+        fpMarkAnswered(data.id, payload.answer && payload.answer.message, payload.answer && payload.answer.status);
       });
     }).catch(function () {
       post(fpAnsweredMessage(data.id, null, {}));
@@ -565,6 +682,20 @@ function fpMountChat(root, frame) {
     renderRecent();
   }
 
+  // Live-Prüfung fp.20: nach einem Klick bleibt der Rahmen einige Sekunden leer; der Hinweis steht bis zum Laden.
+  var loading = root.querySelector("[data-fp-chat-loading]");
+  function showLoading(url) {
+    if (!loading) return;
+    var match = /\/embed\/(\d+)$/.exec(url);
+    if (!match) {
+      loading.hidden = true;
+      return;
+    }
+    loading.textContent = (loading.dataset.template || "").replace("__ID__", match[1]);
+    loading.hidden = false;
+  }
+  if (frame && loading) frame.addEventListener("load", function () { loading.hidden = true; });
+
   function loadFrame(url) {
     frame.dataset.src = url;
     // Chat nicht erreichbar (kein src): "Neu laden" lädt danach den gewählten Thread.
@@ -573,6 +704,7 @@ function fpMountChat(root, frame) {
       sendState();
       return;
     }
+    showLoading(url);
     frame.src = url;
   }
 
@@ -898,7 +1030,7 @@ function fpWidgetFilters(widget) {
 
 // OP#1673: Antwort im Widget „Rückfragen“ ohne Neuladen. Ohne Skript schickt das Formular normal ab und die Seite kommt
 // zurück. Nach der Antwort bekommt der Chat die neue Liste (fp:questions).
-function fpMarkAnswered(id, message) {
+function fpMarkAnswered(id, message, status) {
   document.querySelectorAll("[data-fp-question='" + String(id).replace(/\D/g, "") + "']").forEach(function (item) {
     item.classList.add("is-answered");
     var form = item.querySelector("form[data-fp-question-form]");
@@ -911,6 +1043,18 @@ function fpMarkAnswered(id, message) {
       note.textContent = message || item.getAttribute("data-fp-answered-text") || "";
       note.hidden = false;
       if (typeof note.scrollIntoView === "function") note.scrollIntoView({ block: "nearest" });
+    }
+    // Live-Prüfung fp.20: die Zeile in „Aufmerksamkeit“ zeigt nach der Antwort den neuen Status und nicht mehr „offene
+    // Rückfrage“, sobald keine weitere Frage in der Zeile offen ist.
+    var row = item.closest("tr[data-wp]");
+    if (!row) return;
+    var badge = row.querySelector(".fp-badge[data-fp-status]");
+    if (badge && status) {
+      badge.textContent = status;
+      badge.setAttribute("data-fp-status", status);
+    }
+    if (!row.querySelector("[data-fp-question]:not(.is-answered)")) {
+      row.querySelectorAll(".fp-dash-reason[data-reason='question']").forEach(function (chip) { chip.remove(); });
     }
   });
 }
@@ -983,7 +1127,7 @@ function fpMarkAnswered(id, message) {
     }).then(function (response) {
       return response.json().catch(function () { return {}; }).then(function (payload) {
         if (!response.ok || !payload.ok) throw { fpMessage: payload.error };
-        fpMarkAnswered(form.getAttribute("data-fp-question-form"), payload.answer && payload.answer.message);
+        fpMarkAnswered(form.getAttribute("data-fp-question-form"), payload.answer && payload.answer.message, payload.answer && payload.answer.status);
         window.dispatchEvent(new CustomEvent("fp:questions-changed", { detail: { items: payload.items || [] } }));
       });
     }).catch(function (error) {

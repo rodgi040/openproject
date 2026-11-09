@@ -1492,3 +1492,10 @@ a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addon
 .fp-chat-tickets-body[hidden] {
   display: none;
 }
+
+.fp-chat-loading {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  opacity: 0.8;
+}
