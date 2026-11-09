@@ -241,15 +241,19 @@ function fpCommentedMessage(wpId, clientId, response, payload) {
   };
 }
 
-// OP#1711 Welle 2: neue Ereignisse (Id wie c12, s12, q3) an die bekannten anfügen, ohne Dubletten. Reihenfolge nach Zeit.
+// OP#1711 Welle 2: neue Ereignisse an die bekannten anfügen, ohne Dubletten. Die Id trägt den Inhalt (c12-ab12cd34,
+// s12-3-4); der Teil vor dem "-" ist der Schlüssel der Zeile. Gleiche Id = Wiederholung; gleicher Schlüssel mit neuer
+// Id (OP fasst Journale zusammen, z. B. zweiter Statuswechsel im selben Journal) ersetzt die ältere Zeile.
 function fpMergeEvents(known, incoming) {
-  var seen = {};
-  var merged = [];
+  var byKey = {};
+  var order = [];
   (known || []).concat(incoming || []).forEach(function (event) {
-    if (!event || !event.id || seen[event.id]) return;
-    seen[event.id] = true;
-    merged.push(event);
+    if (!event || !event.id) return;
+    var key = String(event.id).split("-")[0];
+    if (!(key in byKey)) order.push(key);
+    byKey[key] = event;
   });
+  var merged = order.map(function (key) { return byKey[key]; });
   merged.sort(function (a, b) {
     return String(a.at).localeCompare(String(b.at)) || String(a.id).localeCompare(String(b.id), undefined, { numeric: true });
   });
@@ -417,7 +421,7 @@ function fpMountChat(root, frame) {
   // und Neuladen idempotent.
   var eventsFor = 0;
   var eventList = [];
-  var eventCursor = { journal: 0, question: 0 };
+  var eventCursor = { journal: 0, journal_at: "", question: 0, question_at: "" };
   var eventsDisabled = false;
   var eventsBusy = false;
 
@@ -432,11 +436,13 @@ function fpMountChat(root, frame) {
     if (id !== eventsFor) {
       eventsFor = id;
       eventList = [];
-      eventCursor = { journal: 0, question: 0 };
+      eventCursor = { journal: 0, journal_at: "", question: 0, question_at: "" };
     }
     eventsBusy = true;
     var query = "wp=" + id + (eventCursor.journal ? "&after=" + eventCursor.journal : "") +
-      (eventCursor.question ? "&after_question=" + eventCursor.question : "");
+      (eventCursor.journal_at ? "&after_at=" + encodeURIComponent(eventCursor.journal_at) : "") +
+      (eventCursor.question ? "&after_question=" + eventCursor.question : "") +
+      (eventCursor.question_at ? "&after_question_at=" + encodeURIComponent(eventCursor.question_at) : "");
     fetch("/flightplan/chat/events?" + query, { headers: { "Accept": "application/json" }, credentials: "same-origin" })
       .then(function (response) {
         if (response.status === 403) eventsDisabled = true;
@@ -447,11 +453,16 @@ function fpMountChat(root, frame) {
       .then(function (result) {
         eventsBusy = false;
         if (!result.ok || !result.payload.ok || Number(result.payload.work_package_id) !== eventsFor) return;
-        var before = eventList.length;
+        var before = JSON.stringify(eventList);
         eventList = fpMergeEvents(eventList, result.payload.events);
         var cursor = result.payload.cursor || {};
-        eventCursor = { journal: Number(cursor.journal) || eventCursor.journal, question: Number(cursor.question) || eventCursor.question };
-        if (eventList.length !== before || before === 0) sendEvents();
+        eventCursor = {
+          journal: Number(cursor.journal) || eventCursor.journal,
+          journal_at: String(cursor.journal_at || eventCursor.journal_at || ""),
+          question: Number(cursor.question) || eventCursor.question,
+          question_at: String(cursor.question_at || eventCursor.question_at || "")
+        };
+        if (JSON.stringify(eventList) !== before || before === "[]") sendEvents();
       })
       .catch(function () {
         eventsBusy = false;

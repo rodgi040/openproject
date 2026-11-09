@@ -192,13 +192,26 @@ RSpec.describe "Flightplan chat thread", type: :rails_request do
   describe "GET events" do
     before { login(admin) }
 
-    it "lists comments, status changes and questions once each with stable ids" do
-      work_package.add_journal(user: admin, notes: "Agent-Zwischenstand")
-      work_package.save_journals
+    def cursor_params(payload)
+      cursor = payload["cursor"]
+      { after: cursor["journal"], after_at: cursor["journal_at"],
+        after_question: cursor["question"], after_question_at: cursor["question_at"] }
+    end
+
+    def change_status(user, status)
       work_package.reload
-      work_package.status = waiting
-      work_package.add_journal(user: admin, notes: nil)
+      work_package.status = status
+      work_package.add_journal(user:, notes: nil)
       work_package.save!
+    end
+
+    def add_note(user, text)
+      AddWorkPackageNoteService.new(user:, work_package: work_package.reload).call(text, send_notifications: false)
+    end
+
+    it "lists comments, status changes and answered questions once each with content ids" do
+      add_note(admin, "Agent-Zwischenstand")
+      change_status(admin, waiting)
       question = Flightplan::Question.create!(work_package:, author: admin, question: "Welche Variante?", status: "open")
 
       payload = events
@@ -207,8 +220,66 @@ RSpec.describe "Flightplan chat thread", type: :rails_request do
       kinds = payload["events"].group_by { |event| event["kind"] }
       expect(kinds["comment"].map { |event| event["text"] }).to include("Agent-Zwischenstand")
       expect(kinds["status"].last).to include("from" => "In Arbeit", "to" => "Wartet auf Mensch")
-      expect(kinds["question"].first).to include("id" => "q#{question.id}", "text" => "Welche Variante?")
-      expect(events["events"].map { |event| event["id"] }).to eq(ids) # Neuladen: gleiche Ids
+      expect(kinds["question"]).to be_nil # offene Frage steht im Formular, nicht im Verlauf
+
+      question.update!(status: "answered", answer: "Variante B", answered_by: admin, answered_at: Time.current)
+      answered = events["events"].select { |event| event["kind"] == "question" }
+      expect(answered.size).to eq(1)
+      expect(answered.first["id"]).to start_with("q#{question.id}-")
+      expect(answered.first["text"]).to eq("Welche Variante? – Antwort: Variante B")
+      expect(events["events"].map { |event| event["id"] }).to include(*ids) # Neuladen: gleiche Ids
+    end
+
+    it "omits the journals written for questions and their answers" do
+      add_note(admin, "Rückfrage: Welche Variante? Inbox: /#q-13")
+      change_status(admin, waiting)
+      add_note(create(:admin, member_with_roles: { project => role }), "Rückfrage von claude:\n> Welche?\nAntwort: B")
+      add_note(admin, "normaler Kommentar")
+
+      texts = events["events"].select { |event| event["kind"] == "comment" }.map { |event| event["text"] }
+      expect(texts).to eq(["normaler Kommentar"])
+    end
+
+    context "when OP aggregates journals of the same user" do
+      before { allow(Setting).to receive(:journal_aggregation_time_minutes).and_return(5) }
+
+      it "reports a status change that lands in the journal of the comment, once, and nothing on an unchanged poll" do
+        add_note(admin, "Zwischenstand")
+        first = events
+        expect(first["events"].map { |event| event["kind"] }).to eq(["comment"])
+
+        change_status(admin, waiting)
+        expect(work_package.journals.where.not(notes: [nil, ""]).count).to eq(1) # derselbe Journal, aggregiert
+
+        second = events(cursor_params(first))
+        expect(second["events"].map { |event| event["kind"] }).to include("status")
+        merged = (first["events"] + second["events"]).uniq { |event| event["id"] }
+        expect(merged.map { |event| event["kind"] }.sort).to eq(%w[comment status])
+
+        third = events(cursor_params(second))
+        known = merged.map { |event| event["id"] }
+        expect(third["events"].map { |event| event["id"] } - known).to be_empty
+      end
+
+      it "makes a second note in the same minute a new journal and a new event" do
+        add_note(admin, "eins")
+        first = events
+        add_note(admin, "zwei") # OP hängt keine zweite Notiz an: neues Journal ("only_one_note")
+
+        later = events(cursor_params(first))
+        texts = later["events"].select { |event| event["kind"] == "comment" }.map { |event| event["text"] }
+        expect(texts).to include("zwei")
+        expect(work_package.journals.where.not(notes: [nil, ""]).count).to eq(2)
+      end
+
+      it "gives a note added to an aggregated status journal a new content id" do
+        change_status(admin, waiting)
+        first = events
+        add_note(admin, "danach")
+
+        later = events(cursor_params(first))
+        expect(later["events"].map { |event| event["text"] }.compact).to include("danach")
+      end
     end
 
     it "marks comments that came from the chat" do
@@ -220,14 +291,12 @@ RSpec.describe "Flightplan chat thread", type: :rails_request do
     end
 
     it "returns only newer events after the cursor" do
-      work_package.add_journal(user: admin, notes: "eins")
-      work_package.save_journals
+      add_note(admin, "eins")
       first = events
-      work_package.add_journal(user: admin, notes: "zwei")
-      work_package.save_journals
+      add_note(create(:admin, member_with_roles: { project => role }), "zwei")
 
-      later = events(after: first["cursor"]["journal"], after_question: first["cursor"]["question"])
-      expect(later["events"].map { |event| event["text"] }).to eq(["zwei"])
+      later = events(cursor_params(first))
+      expect(later["events"].map { |event| event["text"] }.compact).to include("zwei")
     end
 
     it "returns hostile text as a JSON string and truncates it" do

@@ -20,7 +20,8 @@ module Flightplan
       work_package = visible_work_package
       payload = Flightplan::ChatEvents.load(
         user: User.current, work_package:,
-        after_journal: params[:after], after_question: params[:after_question]
+        after_journal: params[:after], after_journal_at: params[:after_at],
+        after_question: params[:after_question], after_question_at: params[:after_question_at]
       )
       render json: payload.merge(ok: true, work_package_id: work_package.id)
     end
