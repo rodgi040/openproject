@@ -572,7 +572,7 @@ function fpMountChat(root, frame) {
         if (!response.ok || !payload.ok) return;
         questions = payload.items || [];
         sendState();
-        fpMarkAnswered(data.id, payload.answer && payload.answer.message);
+        fpMarkAnswered(data.id, payload.answer && payload.answer.message, payload.answer && payload.answer.status);
       });
     }).catch(function () {
       post(fpAnsweredMessage(data.id, null, {}));
@@ -671,6 +671,20 @@ function fpMountChat(root, frame) {
     renderRecent();
   }
 
+  // Live-Prüfung fp.20: nach einem Klick bleibt der Rahmen einige Sekunden leer; der Hinweis steht bis zum Laden.
+  var loading = root.querySelector("[data-fp-chat-loading]");
+  function showLoading(url) {
+    if (!loading) return;
+    var match = /\/embed\/(\d+)$/.exec(url);
+    if (!match) {
+      loading.hidden = true;
+      return;
+    }
+    loading.textContent = (loading.dataset.template || "").replace("__ID__", match[1]);
+    loading.hidden = false;
+  }
+  if (frame && loading) frame.addEventListener("load", function () { loading.hidden = true; });
+
   function loadFrame(url) {
     frame.dataset.src = url;
     // Chat nicht erreichbar (kein src): "Neu laden" lädt danach den gewählten Thread.
@@ -679,6 +693,7 @@ function fpMountChat(root, frame) {
       sendState();
       return;
     }
+    showLoading(url);
     frame.src = url;
   }
 
@@ -1004,7 +1019,7 @@ function fpWidgetFilters(widget) {
 
 // OP#1673: Antwort im Widget „Rückfragen“ ohne Neuladen. Ohne Skript schickt das Formular normal ab und die Seite kommt
 // zurück. Nach der Antwort bekommt der Chat die neue Liste (fp:questions).
-function fpMarkAnswered(id, message) {
+function fpMarkAnswered(id, message, status) {
   document.querySelectorAll("[data-fp-question='" + String(id).replace(/\D/g, "") + "']").forEach(function (item) {
     item.classList.add("is-answered");
     var form = item.querySelector("form[data-fp-question-form]");
@@ -1017,6 +1032,18 @@ function fpMarkAnswered(id, message) {
       note.textContent = message || item.getAttribute("data-fp-answered-text") || "";
       note.hidden = false;
       if (typeof note.scrollIntoView === "function") note.scrollIntoView({ block: "nearest" });
+    }
+    // Live-Prüfung fp.20: die Zeile in „Aufmerksamkeit“ zeigt nach der Antwort den neuen Status und nicht mehr „offene
+    // Rückfrage“, sobald keine weitere Frage in der Zeile offen ist.
+    var row = item.closest("tr[data-wp]");
+    if (!row) return;
+    var badge = row.querySelector(".fp-badge[data-fp-status]");
+    if (badge && status) {
+      badge.textContent = status;
+      badge.setAttribute("data-fp-status", status);
+    }
+    if (!row.querySelector("[data-fp-question]:not(.is-answered)")) {
+      row.querySelectorAll(".fp-dash-reason[data-reason='question']").forEach(function (chip) { chip.remove(); });
     }
   });
 }
@@ -1089,7 +1116,7 @@ function fpMarkAnswered(id, message) {
     }).then(function (response) {
       return response.json().catch(function () { return {}; }).then(function (payload) {
         if (!response.ok || !payload.ok) throw { fpMessage: payload.error };
-        fpMarkAnswered(form.getAttribute("data-fp-question-form"), payload.answer && payload.answer.message);
+        fpMarkAnswered(form.getAttribute("data-fp-question-form"), payload.answer && payload.answer.message, payload.answer && payload.answer.status);
         window.dispatchEvent(new CustomEvent("fp:questions-changed", { detail: { items: payload.items || [] } }));
       });
     }).catch(function (error) {

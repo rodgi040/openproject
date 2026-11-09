@@ -112,6 +112,7 @@ de:
       chat: "Chat (T3 Code, Gandalf)"
       chat_admin_only: "Der Chat (T3 Code) steht nur Administratoren zur Verfügung. Fragen zu einem Ticket stellen Sie als Kommentar am Ticket."
       tickets: "Laufende Tickets"
+      opening: "Öffne Chat zu #%{id} …"
       new_chat: "Neuer Chat"
       no_running_tickets: "Keine laufenden Tickets"
       recent_tickets: "Zuletzt geöffnet"
