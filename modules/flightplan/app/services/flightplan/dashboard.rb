@@ -274,7 +274,8 @@ module Flightplan
         reasons << :no_path
       end
       since = stamps.min || since_status
-      approvable = APPROVABLE_STATUSES.include?(status) && context[:masters][wp[:id]] == "op"
+      # OP#1709: Solange eine Rückfrage offen ist, gibt es keine Startfreigabe.
+      approvable = APPROVABLE_STATUSES.include?(status) && context[:masters][wp[:id]] == "op" && question_at.nil?
       {
         id: wp[:id], subject: wp[:subject], project: project[:name], project_identifier: project[:identifier],
         project_path: project_paths[wp[:project_id]] || [project[:identifier]], labels: context[:labels][wp[:id]] || [],
