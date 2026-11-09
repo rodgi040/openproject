@@ -124,9 +124,11 @@ RSpec.describe "Flightplan approvals", type: :rails_request do
     it "hides the button and rejects the approval while a question is open (OP#1709)" do
       agent = create(:user, login: "agent-frager")
       Flightplan::Question.create!(work_package: op_wp, author: agent, question: "Noch offen?", status: "open")
+      ohne_frage = create(:work_package, project:, author: admin, status: waiting, subject: "Op Ohne Frage")
+      master(ohne_frage, "op")
       get "/flightplan/dashboard"
       expect(response.body[/<tr data-wp="#{op_wp.id}"[^>]*>.*?<\/tr>/m]).not_to include("Starten freigeben", "fp-approve-check")
-      expect(response.body[/<tr data-wp="#{op_geplant.id}"[^>]*>.*?<\/tr>/m]).to include("Starten freigeben")
+      expect(response.body[/<tr data-wp="#{ohne_frage.id}"[^>]*>.*?<\/tr>/m]).to include("Starten freigeben", "fp-approve-check")
       with_csrf { approve(single: op_wp.id, lock_versions: { op_wp.id => op_wp.lock_version }) }
       expect(flash[:alert]).to include("1 abgelehnt", "Rückfrage ist noch offen")
       expect(op_wp.reload.status).to eq(waiting)
