@@ -1379,3 +1379,116 @@ a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addon
   color: var(--fgColor-accent, #0969da);
   cursor: pointer;
 }
+
+/* OP#1711: Ticketleiste über dem Startseiten-Chat. Kompakte Liste mit max-height, bleibt bei Zoom 150/200 % bedienbar. */
+.fp-chat-tickets {
+  flex: 0 0 auto;
+  margin-bottom: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.fp-chat-ticket-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.fp-chat-ticket {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  min-width: 0;
+  padding: 0.2rem 0.4rem;
+  border-radius: 6px;
+  color: inherit;
+  text-decoration: none;
+  background: none;
+  border: 0;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.fp-chat-ticket:hover,
+.fp-chat-ticket:focus-visible {
+  background: var(--bgColor-muted, #f6f8fa);
+}
+
+.fp-chat-ticket[aria-current="true"] {
+  background: var(--bgColor-accent-muted, #ddf4ff);
+  font-weight: 600;
+}
+
+.fp-chat-ticket-id {
+  flex: 0 0 auto;
+  color: var(--fgColor-muted, #59636e);
+}
+
+.fp-chat-ticket-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fp-chat-ticket-status {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  padding: 0 0.35rem;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: 999px;
+}
+
+.fp-chat-tickets-empty,
+.fp-chat-recent-label {
+  margin: 0.2rem 0.4rem;
+  color: var(--fgColor-muted, #59636e);
+}
+
+.fp-chat-tickets-more {
+  margin: 0.2rem 0.4rem;
+  background: none;
+  border: 0;
+  color: var(--fgColor-accent, #0969da);
+  cursor: pointer;
+  font: inherit;
+}
+
+.fp-chat-tickets-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  width: 100%;
+  min-width: 0;
+  padding: 0.2rem 0.4rem;
+  background: none;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fp-chat-tickets-head-title {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+.fp-chat-tickets-head-active {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fgColor-muted, #59636e);
+}
+
+.fp-chat-tickets-body {
+  max-height: 8.5rem;
+  overflow-y: auto;
+}
+
+.fp-chat-tickets-body[hidden] {
+  display: none;
+}

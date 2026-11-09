@@ -104,6 +104,51 @@ RSpec.describe "Flightplan Startseite", :skip_csrf,
       expect(home_rules).to include("grid-template-rows: minmax(0, 1fr)", "height: var(--fp-home-fit)")
       expect(home_rules).not_to match(/min-height:\s*(32rem|calc\(100vh)/)
     end
+
+    # OP#1711: Ticketleiste im Chat.
+    describe "ticket bar of the chat" do
+      let(:project) { create(:project, public: false, members: { admin => create(:project_role, permissions: %i[view_work_packages]) }) }
+      let(:bar) { content.at_css(".fp-home-chat [data-fp-chat-tickets]") }
+
+      def ensure_status(name)
+        Status.find_by(name:) || create(:status, name:)
+      end
+
+      it "shows a running ticket with a link and data attributes to /chat/embed/<id>, and escapes the title" do
+        running = create(:work_package, project:, status: ensure_status("In Arbeit"), subject: "<img src=x onerror=alert(1)> Probe")
+        done = create(:work_package, project:, status: ensure_status("Geplant"), subject: "Nicht laufend")
+        get "/"
+        link = bar.at_css("a[data-fp-chat-ticket='#{running.id}']")
+        expect(link).to be_present
+        expect(link["href"]).to eq("http://localhost:8092/chat/embed/#{running.id}")
+        expect(link.at_css(".fp-chat-ticket-title").text).to include("<img src=x onerror=alert(1)> Probe")
+        expect(bar.at_css("img")).to be_nil
+        expect(response.body).not_to include("<img src=x onerror")
+        expect(bar.at_css("a[data-fp-chat-ticket='#{done.id}']")).to be_nil
+        expect(bar.at_css("[data-fp-chat-new]")).to be_present
+        expect(bar.at_css("[data-fp-chat-tickets-empty]")).to be_nil
+        expect(bar.at_css("[data-fp-chat-tickets-count]").text).to include("Laufend (1)")
+        expect(bar.css("[aria-current]").size).to eq(1)
+      end
+
+      it "orders In Arbeit before Wartet auf Mensch and Review, and counts every running ticket" do
+        review = create(:work_package, project:, status: ensure_status("Review"), subject: "R")
+        waiting = create(:work_package, project:, status: ensure_status("Wartet auf Mensch"), subject: "W")
+        running = create(:work_package, project:, status: ensure_status("In Arbeit"), subject: "A")
+        stub_const("Flightplan::ChatTickets::LIMIT", 2)
+        get "/"
+        ids = bar.css("[data-fp-chat-ticket-list] [data-fp-chat-ticket]").map { |node| node["data-fp-chat-ticket"].to_i }
+        expect(ids).to eq([running.id, waiting.id])
+        expect(ids).not_to include(review.id)
+        expect(bar.at_css("[data-fp-chat-tickets-count]").text).to include("Laufend: 2 von 3")
+      end
+
+      it "shows an empty state instead of an empty bar without running tickets" do
+        get "/"
+        expect(bar.at_css("[data-fp-chat-tickets-empty]").text).to include("Keine laufenden Tickets")
+        expect(bar.at_css("[data-fp-chat-ticket]")).to be_nil
+      end
+    end
   end
 
   describe "as a user without admin rights" do
@@ -118,6 +163,7 @@ RSpec.describe "Flightplan Startseite", :skip_csrf,
       expect(content.at_css(".fp-home-chat [data-fp-chat-admin-only]")).to be_present
       expect(content.text).to include("Chat (T3 Code) steht nur Administratoren zur Verfügung")
       expect(response.body).not_to include("<iframe", "localhost:8092/chat/")
+      expect(response.body).not_to include("data-fp-chat-tickets")
       expect_no_upstream_blocks
     end
 

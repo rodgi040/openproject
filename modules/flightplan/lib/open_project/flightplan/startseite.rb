@@ -20,6 +20,7 @@ module OpenProject
         if User.current.admin?
           @dashboard = ::Flightplan::Dashboard.load(user: User.current, params: params.permit(:bereich))
           @approval_state = ::Flightplan::Approvals.availability(User.current)
+          @chat_tickets = ::Flightplan::ChatTickets.load(User.current)
         end
         @board_widget = ::Flightplan::Board.load(user: User.current,
                                                  params: ::Flightplan::BoardController.widget_params(params))
