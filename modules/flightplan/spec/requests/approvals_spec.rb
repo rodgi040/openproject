@@ -30,7 +30,7 @@ RSpec.describe "Flightplan approvals", type: :rails_request do
   def approve(params = nil, token: :fetch, headers: {}, **rest)
     params ||= rest
     if token == :fetch
-      get "/flightplan/dashboard"
+      get "/"
       token = token_from(response.body)
     end
     post "/flightplan/approvals", params: params.merge(authenticity_token: token), headers:
@@ -97,7 +97,7 @@ RSpec.describe "Flightplan approvals", type: :rails_request do
       with_csrf do
         approve(single: op_wp.id, lock_versions: { op_wp.id => op_wp.lock_version })
       end
-      expect(response).to redirect_to("/flightplan/dashboard")
+      expect(response).to redirect_to("/")
       expect(flash[:notice]).to eq("1 freigegeben, 0 abgelehnt.")
       op_wp.reload
       expect(op_wp.status).to eq(startfreigabe)
@@ -114,7 +114,7 @@ RSpec.describe "Flightplan approvals", type: :rails_request do
     end
 
     it "shows the button only for Geplant or Wartet auf Mensch with Master op" do
-      get "/flightplan/dashboard"
+      get "/"
       expect(response.body).to include("Starten freigeben")
       expect(response.body[/<tr data-wp="#{op_wp.id}"[^>]*>.*?<\/tr>/m]).to include("Starten freigeben", "fp-approve-check")
       expect(response.body[/<tr data-wp="#{gh_wp.id}"[^>]*>.*?<\/tr>/m]).not_to include("Starten freigeben")
@@ -126,7 +126,7 @@ RSpec.describe "Flightplan approvals", type: :rails_request do
       Flightplan::Question.create!(work_package: op_wp, author: agent, question: "Noch offen?", status: "open")
       ohne_frage = create(:work_package, project:, author: admin, status: waiting, subject: "Op Ohne Frage")
       master(ohne_frage, "op")
-      get "/flightplan/dashboard"
+      get "/"
       expect(response.body[/<tr data-wp="#{op_wp.id}"[^>]*>.*?<\/tr>/m]).not_to include("Starten freigeben", "fp-approve-check")
       expect(response.body[/<tr data-wp="#{ohne_frage.id}"[^>]*>.*?<\/tr>/m]).to include("Starten freigeben", "fp-approve-check")
       with_csrf { approve(single: op_wp.id, lock_versions: { op_wp.id => op_wp.lock_version }) }
@@ -175,7 +175,7 @@ RSpec.describe "Flightplan approvals", type: :rails_request do
 
     it "keeps titles and flash escaped (XSS)" do
       op_wp.update_columns(subject: "<script>alert('x')</script>")
-      get "/flightplan/dashboard"
+      get "/"
       expect(response.body).not_to include("<script>alert('x')</script>")
       with_csrf { approve(ids: ["<img src=x onerror=alert(1)>"], lock_versions: {}) }
       follow_redirect!
@@ -192,7 +192,7 @@ RSpec.describe "Flightplan approvals", type: :rails_request do
       with_csrf do
         post "/flightplan/approvals", params: { single: op_wp.id, lock_versions: { op_wp.id => op_wp.lock_version } }
       end
-      expect(response).not_to redirect_to("/flightplan/dashboard")
+      expect(response).not_to redirect_to("/")
       expect(op_wp.reload.status).to eq(waiting)
       with_csrf do
         post "/flightplan/approvals", params: { single: op_wp.id, authenticity_token: "falsch",
@@ -248,7 +248,7 @@ RSpec.describe "Flightplan approvals", type: :rails_request do
       other = create(:admin, login: "anderer-admin", password: PASSWORD, password_confirmation: PASSWORD, language: "de",
                              member_with_roles: { project => role })
       login(other)
-      get "/flightplan/dashboard"
+      get "/"
       expect(response.body).to include("fp-approval-off", "steht nicht in FLIGHTPLAN_HUMAN_LOGINS")
       expect(response.body).not_to include("Starten freigeben")
       with_csrf { approve({ single: op_wp.id, lock_versions: { op_wp.id => op_wp.lock_version } }) }
@@ -259,7 +259,7 @@ RSpec.describe "Flightplan approvals", type: :rails_request do
     it "approves nobody when the list is empty (fail-closed) and shows a notice" do
       ENV["FLIGHTPLAN_HUMAN_LOGINS"] = " , "
       login(admin)
-      get "/flightplan/dashboard"
+      get "/"
       expect(response.body).to include("fp-approval-off", "Die Freigabe ist abgeschaltet")
       expect(response.body).not_to include("Starten freigeben")
       with_csrf { approve({ single: op_wp.id, lock_versions: { op_wp.id => op_wp.lock_version } }) }

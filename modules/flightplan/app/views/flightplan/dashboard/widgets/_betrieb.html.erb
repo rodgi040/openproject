@@ -11,7 +11,14 @@
 <% entries = checks.map { |check| { statuses: [lamp.(check["ampel"])] } } + versions.map { |_, part| { statuses: [lamp.(part["ampel"])] } } %>
 <% lamp_order = %w[gruen gelb rot unbekannt].map { |key| t("flightplan.dashboard.lamp.#{key}") } %>
 <% filters = Flightplan::WidgetFilters.new(entries, status_order: lamp_order, scope: false) %>
-<%= render layout: "flightplan/dashboard/widget", locals: { key: "betrieb", title: t("flightplan.dashboard.tiles.health"), filters: } do %>
+<%# OP#1722: kleine Kachel in der Statusleiste; Gesamtampel im Kopf, Prüfungen und Versionen in den Details. %>
+<% summary = if health.inactive?
+               tag.span(t("flightplan.dashboard.not_active"), class: "fp-dash-off")
+             else
+               overall_lamp = color.(health.data["gesamt"])
+               tag.span(t("flightplan.dashboard.lamp.#{overall_lamp}"), class: "fp-dash-lamp", data: { lamp: overall_lamp })
+             end %>
+<%= render layout: "flightplan/dashboard/widget", locals: { key: "betrieb", title: t("flightplan.dashboard.tiles.health"), filters:, compact: true, summary: } do %>
   <article class="fp-widget-block" data-tile="health">
     <% if health.inactive? %>
       <p class="fp-dash-off"><%= t("flightplan.dashboard.not_active") %></p>

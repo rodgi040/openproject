@@ -516,6 +516,25 @@ function fpLabelFilter(box) {
   }
   var groups = Array.prototype.slice.call(box.querySelectorAll("[data-fp-label-group]"));
   var counter = box.querySelector("[data-fp-labels-count]");
+  // OP#1706: gewählte Labels als kleine Chips mit Entfernen-Möglichkeit neben dem Aufklappfeld.
+  var chips = box.parentNode && box.parentNode.querySelector("[data-fp-active-labels]");
+
+  function renderChips() {
+    if (!chips) return;
+    chips.textContent = "";
+    box.querySelectorAll("input[type='checkbox']:checked").forEach(function (input) {
+      var chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "fp-active-label";
+      chip.textContent = input.value + " \u00d7";
+      chip.title = input.value;
+      chip.addEventListener("click", function () {
+        input.checked = false;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      chips.appendChild(chip);
+    });
+  }
 
   function selected() {
     return groups.map(function (group) {
@@ -529,6 +548,7 @@ function fpLabelFilter(box) {
     active: function () {
       var count = selected().reduce(function (sum, names) { return sum + names.length; }, 0);
       if (counter) counter.textContent = count ? "(" + count + ")" : "";
+      renderChips();
       return count > 0;
     },
     match: function (labels) {
@@ -702,7 +722,10 @@ function fpWidgetFilters(widget) {
     }
     var stored = null;
     try { stored = window.localStorage.getItem(key); } catch (error) { stored = null; }
-    if (stored === "1") set(true);
+    // OP#1722: Widgets mit data-fp-collapsed-default (Übersicht) starten eingeklappt, bis der Nutzer anders wählt.
+    var byDefault = widget.hasAttribute("data-fp-collapsed-default");
+    if (stored === "1" || (stored === null && byDefault)) set(true);
+    else if (stored === "0") set(false);
     button.addEventListener("click", function () {
       set(!widget.classList.contains("is-collapsed"));
     });
@@ -725,18 +748,38 @@ function fpMarkAnswered(id) {
   });
 }
 
+// OP#1722: Ein Sprung auf ein Ziel in der eingeklappten Statusleiste (#fp-tile-agents) klappt die Kachel auf.
+(function () {
+  function openFold() {
+    var id = window.location.hash.slice(1);
+    var target = id && document.getElementById(id);
+    var fold = target && target.closest("details[data-fp-widget-fold]");
+    if (fold) fold.open = true;
+  }
+  document.addEventListener("click", function (event) {
+    var link = event.target.closest && event.target.closest("a[href^='#fp-tile-']");
+    var target = link && document.getElementById(link.getAttribute("href").slice(1));
+    var fold = target && target.closest("details[data-fp-widget-fold]");
+    if (fold) fold.open = true;
+  });
+  window.addEventListener("hashchange", openFold);
+  openFold();
+})();
+
+// OP#1708: Das Antwortformular steht im Widget „Rückfragen“ (Leser-Ansicht) und in den Zeilen von „Aufmerksamkeit“ (Admin);
+// die Behandlung hängt deshalb am Dokument und greift auf jedes form[data-fp-question-form].
 (function () {
   var widget = document.querySelector("[data-fp-widget='questions']");
-  if (!widget) return;
   // Erst nach dem Laden der Stylesheets: vorher ist .fp-home-main noch kein Scrollbereich.
-  if (!window.location.hash && /[?&]rueckfragen=/.test(window.location.search)) {
+  if (widget && !window.location.hash && /[?&]rueckfragen=/.test(window.location.search)) {
     var reveal = function () { widget.scrollIntoView({ block: "start" }); };
     if (document.readyState === "complete") reveal();
     else window.addEventListener("load", reveal);
   }
+  if (!document.querySelector("form[data-fp-question-form]")) return;
   if (typeof fetch !== "function" || typeof FormData !== "function") return;
 
-  widget.addEventListener("keydown", function (event) {
+  document.addEventListener("keydown", function (event) {
     if (event.key !== "Enter" || !(event.ctrlKey || event.metaKey)) return;
     var form = event.target.closest && event.target.closest("form[data-fp-question-form]");
     if (!form) return;
@@ -744,7 +787,7 @@ function fpMarkAnswered(id) {
     form.requestSubmit(form.querySelector(".fp-q-send"));
   });
 
-  widget.addEventListener("submit", function (event) {
+  document.addEventListener("submit", function (event) {
     var form = event.target.closest && event.target.closest("form[data-fp-question-form]");
     if (!form) return;
     event.preventDefault();

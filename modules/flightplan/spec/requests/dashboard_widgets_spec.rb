@@ -3,7 +3,7 @@
 require "#{File.dirname(__FILE__)}/../spec_helper"
 require "tmpdir"
 
-# OP#1672: Das ADA-Dashboard (Startseite / und /flightplan/dashboard) besteht aus Insel-Widgets: Übersicht oben, darunter
+# OP#1672: Das ADA-Dashboard (Startseite /; OP#1721: /flightplan/dashboard leitet dorthin um) besteht aus Insel-Widgets: Übersicht oben, darunter
 # Aufmerksamkeit, laufende Agents und Betrieb. Jedes Widget hat einen eigenen Scrollbereich und Suche und Filter
 # (Text, Projekt/Bereich, Status, Label), die im Browser über die gerenderten Einträge wirken.
 RSpec.describe "Flightplan dashboard widgets", :skip_csrf, type: :rails_request do
@@ -75,7 +75,7 @@ RSpec.describe "Flightplan dashboard widgets", :skip_csrf, type: :rails_request 
   end
 
   def widget(key)
-    found = page.at_css("#fp-home .fp-home-main .fp-widgets > .fp-widget[data-fp-widget='#{key}']")
+    found = page.at_css("#fp-home .fp-home-main .fp-widgets .fp-widget[data-fp-widget='#{key}']")
     expect(found).to be_present, "Widget #{key} fehlt"
     found
   end
@@ -100,14 +100,17 @@ RSpec.describe "Flightplan dashboard widgets", :skip_csrf, type: :rails_request 
   describe "as admin" do
     current_user { admin }
 
-    %w[/ /flightplan/dashboard].each do |path|
-      it "puts the overview first, then attention, then the other widgets (#{path})" do
-        get path
-        expect(response).to have_http_status(:ok)
-        keys = page.css("#fp-home .fp-home-main .fp-widgets > .fp-widget").map { |node| node["data-fp-widget"] }
-        expect(keys).to eq(%w[overview attention questions board running betrieb])
-        expect(page.at_css("#content-body > #fp-home")).to be_present
-      end
+    # OP#1722: Übersicht, Statusleiste (Laufende Agents + Betrieb), Board, Aufmerksamkeit; „Rückfragen“ nicht mehr eigen.
+    it "puts the overview first, then the status bar, the board and attention, without the questions widget" do
+      get "/"
+      expect(response).to have_http_status(:ok)
+      children = page.css("#fp-home .fp-home-main .fp-widgets > *").map { |node| node["data-fp-widget"] || node["data-fp-statusbar"] && "status" }
+      expect(children).to eq(%w[overview status board attention])
+      bar = page.at_css("#fp-home .fp-widgets > [data-fp-statusbar]")
+      expect(bar.css(".fp-widget--compact").map { |node| node["data-fp-widget"] }).to eq(%w[running betrieb])
+      expect(bar.css(".fp-widget--compact details[data-fp-widget-fold]").size).to eq(2)
+      expect(page.at_css("[data-fp-widget='questions']")).to be_nil
+      expect(page.at_css("#content-body > #fp-home")).to be_present
     end
 
     it "gives every widget a title, its own scroll area, a search field and an empty-result notice" do

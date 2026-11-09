@@ -127,6 +127,7 @@ de:
       none: Keine Treffer für diese Suche.
       count: Einträge (sichtbar von gesamt)
       open_blocked: offen / blockiert
+      details: Details
     dashboard:
       menu: ADA Dashboard
       title: ADA Dashboard

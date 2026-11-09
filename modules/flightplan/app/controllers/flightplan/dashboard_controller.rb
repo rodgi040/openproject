@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
 module Flightplan
-  # Nur lesend (H7). Nur Admin (OE1, F7): require_admin antwortet anonym mit Login-Weiterleitung, sonst 403.
+  # OP#1721: Das ADA-Dashboard ist die Hauptseite (/). Die alte Adresse /flightplan/dashboard leitet dorthin um und behält
+  # die Query-Parameter (bereich, board[…], rueckfragen). Weiter nur Admin (OE1, F7): require_admin antwortet anonym mit
+  # Login-Weiterleitung, sonst 403.
   class DashboardController < ApplicationController
     before_action :require_admin
     no_authorization_required! :index
@@ -9,17 +11,12 @@ module Flightplan
     layout "global"
 
     current_menu_item [:index] do
-      :flightplan_dashboard
+      :home
     end
 
     def index
-      @dashboard = Flightplan::Dashboard.load(user: User.current, params: params.permit(:bereich))
-      @approval_state = Flightplan::Approvals.availability(User.current)
-      @board_widget = Flightplan::Board.load(user: User.current, params: Flightplan::BoardController.widget_params(params))
-      @questions_widget = Flightplan::QuestionsWidget.load(
-        user: User.current, params: params.permit(Flightplan::QuestionsWidget::PARAM),
-        tree: @dashboard.project_tree, status_order: @dashboard.status_order
-      )
+      query = request.query_parameters
+      redirect_to query.empty? ? root_path : root_path(query)
     end
   end
 end

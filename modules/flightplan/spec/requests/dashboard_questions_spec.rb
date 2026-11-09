@@ -86,99 +86,52 @@ RSpec.describe "Flightplan questions widget", :skip_csrf, type: :rails_request d
   describe "as admin" do
     current_user { admin }
 
-    %w[/ /flightplan/dashboard].each do |path|
-      it "puts the questions widget directly after attention, full width (#{path})" do
-        get path
-        expect(response).to have_http_status(:ok)
-        keys = page.css("#fp-home .fp-home-main .fp-widgets > .fp-widget").map { |node| node["data-fp-widget"] }
-        expect(keys).to eq(%w[overview attention questions board running betrieb])
-        expect(questions_widget["class"]).to include("fp-widget--wide")
-        expect(questions_widget.at_css(".fp-widget-head h2").text).to eq("Rückfragen")
-        expect(questions_widget.at_css("[data-fp-widget-count]").text.strip).to eq("2")
-      end
+    # OP#1722/OP#1708: In der Admin-Ansicht gibt es kein eigenes Widget „Rückfragen“ mehr; die Fragen stehen in den Zeilen
+    # von „Aufmerksamkeit“ (Leser-Ansicht: Widget, siehe unten).
+    def attention_row(work_package)
+      node = page.at_css("#fp-widget-attention tr[data-wp='#{work_package.id}']")
+      expect(node).to be_present, "Zeile für ##{work_package.id} fehlt"
+      node
     end
 
-    it "lists the open questions of all projects with project, ticket link, question, agent and age" do
+    it "has no questions widget for admins and shows the questions inside the attention rows" do
       get "/"
-      texts = questions_widget.css("[data-fp-item]").map { |node| node.at_css(".fp-q-text").text.strip }
-      expect(texts).to eq(["Welcher Port <b>soll</b> es sein?", "Darf ich mergen?"])
-      expect(questions_widget.text).not_to include("Schon erledigt?")
-      node = item(factory_question)
-      expect(node["id"]).to eq("q-#{factory_question.id}")
-      expect(node.at_css(".fp-q-project").text).to eq("Frage Fabrik")
-      link = node.at_css("a.fp-q-id")
-      expect(link.text).to eq("##{factory_wp.id}")
-      expect(link["href"]).to eq("/flightplan/work_packages/#{factory_wp.id}")
-      expect(node.at_css("a.fp-q-subject").text).to eq("Fabrik fragt")
-      expect(node.at_css(".fp-q-context").text).to eq("Port 8092 ist belegt.")
-      expect(node.at_css(".fp-q-agent").text).to include("Coda Agentin", "Agent · Coding")
-      expect(node.at_css("time.fp-q-age").text).to eq("3 Std.")
-      expect(item(gen_question).at_css("time.fp-q-age").text).to eq("2 T")
+      expect(response).to have_http_status(:ok)
+      keys = page.css("#fp-home .fp-home-main .fp-widgets > .fp-widget").map { |node| node["data-fp-widget"] }
+      expect(keys).to eq(%w[overview board attention])
+      expect(page.at_css("[data-fp-widget='questions']")).to be_nil
+      texts = page.css("#fp-widget-attention .fp-q .fp-q-text").map { |node| node.text.strip }
+      expect(texts).to contain_exactly("Welcher Port <b>soll</b> es sein?", "Darf ich mergen?")
       expect(response.body).not_to include("<b>soll</b>")
+      expect(page.text).not_to include("Schon erledigt?")
     end
 
-    it "groups the questions by Bereich and marks them for search and filter" do
+    it "shows the question, option buttons and the answer form in the attention row (OP#1708)" do
       get "/"
-      groups = questions_widget.css("[data-fp-group]")
-      expect(groups.map { |group| group["data-questions-group"] }).to eq(["ADA MAIN", "NuovaGen"])
-      node = item(factory_question)
-      expect(node["data-fp-area"]).to eq("ADA MAIN")
-      expect(JSON.parse(node["data-fp-projects"])).to eq(%w[frage-fabrik ada-main])
-      expect(JSON.parse(node["data-fp-statuses"])).to eq(["Wartet auf Mensch"])
-      expect(JSON.parse(node["data-fp-labels"])).to eq(["P1"])
-      tools = questions_widget.at_css("[data-fp-widget-tools]")
-      expect(tools.at_css("input[type='search'][data-fp-filter='text']")).to be_present
-      scope = tools.css("select[data-fp-filter='scope'] option").map { |option| option["value"] }
-      expect(scope).to include("bereich:ADA MAIN", "bereich:NuovaGen", "project:frage-fabrik", "project:nuovagen")
-      expect(tools.css("select[data-fp-filter='status'] option").map { |option| option["value"] }.compact_blank)
-        .to eq(["Wartet auf Mensch"])
-      expect(tools.css("[data-fp-filter='labels'] input[type='checkbox']").map { |box| box["value"] }).to eq(["P1"])
-    end
-
-    it "offers the answer directly in the widget, through the existing answer route" do
-      get "/"
-      form = item(factory_question).at_css("form[data-fp-question-form]")
+      row = attention_row(factory_wp)
+      expect(row.at_css("[data-reason='question']")).to be_present
+      node = row.at_css("#q-#{factory_question.id}[data-fp-question='#{factory_question.id}']")
+      expect(node.at_css(".fp-q-text").text.strip).to eq("Welcher Port <b>soll</b> es sein?")
+      form = node.at_css("form[data-fp-question-form]")
       expect(form["action"]).to eq("/flightplan/questions/#{factory_question.id}/answer")
       expect(form["method"]).to eq("post")
       expect(form.css("button[name='option']").map { |button| button["value"] }).to eq(%w[8093 8094])
       expect(form.at_css("textarea[name='text']")).to be_present
+      expect(form.at_css("input[name='authenticity_token']")).to be_present if ActionController::Base.allow_forgery_protection
       expect(form.at_css("input[name='return_to']")["value"]).to eq("home")
-      free = item(gen_question).at_css("form[data-fp-question-form]")
+      expect(form.ancestors("form")).to be_empty
+      # Kontext, Beschreibung und Kommentare stehen eingeklappt in <details>.
+      expect(node.at_css("details.fp-q-more .fp-q-context").text).to eq("Port 8092 ist belegt.")
+      expect(node.xpath("./p[contains(@class, 'fp-q-context')]")).to be_empty
+      free = attention_row(gen_wp).at_css("form[data-fp-question-form]")
       expect(free.css("button[name='option']")).to be_empty
       expect(free.at_css("button[type='submit']")).to be_present
-
-      get "/flightplan/dashboard"
-      expect(item(factory_question).at_css("input[name='return_to']")["value"]).to eq("dashboard")
     end
 
-    it "answers from the widget and returns to the home screen, at the next open question" do
-      post "/flightplan/questions/#{factory_question.id}/answer",
-           params: { option: "8093", text: "nimm 8093", return_to: "home" }
-      expect(response).to redirect_to("/#q-#{gen_question.id}")
-      expect(flash[:notice]).to eq("Beantwortet.")
-      factory_question.reload
-      expect(factory_question).not_to be_open
-      expect(factory_question.chosen_option).to eq("8093")
-      expect(factory_question.answer).to eq("nimm 8093")
-      expect(factory_wp.journals.last.notes).to include("Option: 8093", "Antwort: nimm 8093")
-
+    it "keeps the approval form separate from the question forms (no nested forms)" do
       get "/"
-      expect(questions_widget.at_css("[data-fp-question='#{factory_question.id}']")).to be_nil
-      expect(questions_widget.at_css("[data-fp-widget-count]").text.strip).to eq("1")
-    end
-
-    it "returns to the dashboard page and to the widget once no question is left" do
-      post "/flightplan/questions/#{gen_question.id}/answer", params: { text: "ja", return_to: "dashboard" }
-      expect(response).to redirect_to("/flightplan/dashboard#q-#{factory_question.id}")
-      post "/flightplan/questions/#{factory_question.id}/answer", params: { option: "8094", return_to: "dashboard" }
-      expect(response).to redirect_to("/flightplan/dashboard#fp-widget-questions")
-    end
-
-    it "keeps an error visible on the home screen and leaves the question open" do
-      post "/flightplan/questions/#{factory_question.id}/answer", params: { option: "9999", return_to: "home" }
-      expect(response).to redirect_to("/#q-#{factory_question.id}")
-      expect(flash[:alert]).to eq("Option unbekannt")
-      expect(factory_question.reload).to be_open
+      expect(page.css("form form")).to be_empty
+      expect(page.at_css("form#fp-approve-form")).to be_present
     end
 
     it "redirects the old page to the widget on the home screen" do
@@ -197,23 +150,6 @@ RSpec.describe "Flightplan questions widget", :skip_csrf, type: :rails_request d
       expect(response).to have_http_status(:ok)
       ids = JSON.parse(response.body)["items"].map { |entry| entry["id"] }
       expect(ids).to eq([gen_question.id, factory_question.id])
-    end
-
-    it "preselects the project or Bereich of the redirect in the widget filter" do
-      get "/", params: { rueckfragen: "project:frage-fabrik" }
-      selected = questions_widget.at_css("select[data-fp-filter='scope'] option[selected]")
-      expect(selected["value"]).to eq("project:frage-fabrik")
-      get "/", params: { rueckfragen: "bereich:NuovaGen" }
-      expect(questions_widget.at_css("select[data-fp-filter='scope'] option[selected]")["value"]).to eq("bereich:NuovaGen")
-      get "/", params: { rueckfragen: "alle" }
-      expect(questions_widget.at_css("select[data-fp-filter='scope'] option[selected]")).to be_nil
-    end
-
-    it "links the question count of a Bereich tile to the widget" do
-      get "/"
-      link = page.at_css("[data-bereich-tile='NuovaGen'] [data-stat='questions'] a")
-      expect(link.text).to eq("1")
-      expect(link["href"]).to eq("/?rueckfragen=bereich%3ANuovaGen")
     end
 
     it "drops the menu entries of the old page" do

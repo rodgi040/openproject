@@ -5,7 +5,13 @@
 <% running = slots ? (@dashboard.running || []) : [] %>
 <% entries = running.map { |entry| { bereich: entry[:bereich], path: entry[:project_path], statuses: [entry[:status]].compact, labels: entry[:labels] } } %>
 <% filters = Flightplan::WidgetFilters.new(entries, tree: @dashboard.project_tree, status_order: @dashboard.status_order) %>
-<%= render layout: "flightplan/dashboard/widget", locals: { key: "running", title: t("flightplan.dashboard.tiles.slots"), filters: } do %>
+<%# OP#1722: kleine Kachel in der Statusleiste; Belegung im Kopf, Liste und Filter in den Details. %>
+<% summary = if source.inactive? || slots.nil?
+               tag.span(t("flightplan.dashboard.not_active"), class: "fp-dash-off")
+             else
+               tag.span("#{slots['belegt'].is_a?(Integer) ? slots['belegt'] : '?'} / #{slots['maximum'].is_a?(Integer) ? slots['maximum'] : '?'} #{t('flightplan.dashboard.tiles.slots_used')}", class: "fp-dash-num")
+             end %>
+<%= render layout: "flightplan/dashboard/widget", locals: { key: "running", title: t("flightplan.dashboard.tiles.slots"), filters:, compact: true, summary: } do %>
   <article class="fp-widget-block" id="fp-tile-agents" data-tile="agents">
     <% if source.inactive? || slots.nil? %>
       <p class="fp-dash-off"><%= t("flightplan.dashboard.not_active") %></p>

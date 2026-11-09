@@ -20,7 +20,8 @@ module Flightplan
     def load_data
       raw = YAML.safe_load_file(OpenProject::Flightplan::Engine.root.join(PATH)) || {}
       families = Array(raw["families"]).map do |row|
-        { key: row["key"].to_s, title: row["title"].to_s, filter: row.fetch("filter", true) != false,
+        # OP#1706: Eine Familie ohne title bekommt ihren Schlüssel als Namen, nie eine leere Überschrift.
+        { key: row["key"].to_s, title: row["title"].to_s.strip.presence || row["key"].to_s.humanize, filter: row.fetch("filter", true) != false,
           card: row.fetch("card", true) != false, names: Array(row["names"]).map(&:to_s).to_set,
           prefixes: Array(row["prefixes"]).map(&:to_s) }
       end

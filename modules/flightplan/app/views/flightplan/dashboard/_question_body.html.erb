@@ -1,0 +1,47 @@
+<%# OP#1708: Frage mit Optionen, Freitext und Antwortformular. Gemeinsam für das Widget „Rückfragen“ (Leser-Ansicht) und die
+    Zeile in „Aufmerksamkeit“ (Admin). Locals: row (Flightplan::QuestionsWidget-Zeile), return_to, selected_scope, optional
+    compact: Kontext, Beschreibung und Kommentare stehen dann eingeklappt in <details>. Antwortweg: POST
+    /flightplan/questions/:id/answer mit Rails-CSRF-Token (form_with). %>
+<% context = row[:context] %>
+<% compact = local_assigns[:compact] %>
+<% scope_param = Flightplan::QuestionsWidget::PARAM %>
+<p class="fp-q-text"><%= row[:text] %></p>
+<% if row[:context_text].present? && !compact %>
+  <p class="fp-q-context"><%= row[:context_text] %></p>
+<% end %>
+<details class="fp-q-more">
+  <summary><%= t("flightplan.questions.widget.details") %></summary>
+  <% if row[:context_text].present? && compact %>
+    <p class="fp-q-context"><%= row[:context_text] %></p>
+  <% end %>
+  <ul>
+    <li><%= t("flightplan.questions.description") %>: <%= context[:description].presence || "–" %></li>
+    <li><%= t("flightplan.questions.pause") %>: <%= context[:pause].presence || "–" %></li>
+    <li><%= t("flightplan.questions.branch") %>: <%= context[:branch].presence || "–" %></li>
+    <li><%= t("flightplan.questions.pull_request") %>:
+      <% if context[:pull_request] %><%= link_to context[:pull_request], context[:pull_request] %><% else %>–<% end %></li>
+  </ul>
+  <% if context[:comments].any? %>
+    <p class="fp-q-comments-title"><%= t("flightplan.questions.comments") %></p>
+    <% context[:comments].each do |comment| %>
+      <p class="fp-q-comment"><strong><%= comment[:author] %></strong> <%= comment[:text] %></p>
+    <% end %>
+  <% end %>
+</details>
+<%= form_with url: flightplan_question_answer_path(row[:id]), method: :post, local: true, class: "fp-q-form",
+              data: { fp_question_form: row[:id], turbo: false } do %>
+  <%= hidden_field_tag :return_to, return_to, id: nil %>
+  <% if selected_scope %>
+    <%= hidden_field_tag scope_param, selected_scope, id: nil %>
+  <% end %>
+  <textarea name="text" class="fp-q-input" rows="2" id="fp-q-text-<%= row[:id] %>"
+            aria-label="<%= t("flightplan.questions.widget.free_text_for", question: row[:text].truncate(80)) %>"
+            placeholder="<%= row[:options].any? ? t("flightplan.questions.widget.free_text_optional") : t("flightplan.questions.free_text") %>"></textarea>
+  <div class="fp-q-actions">
+    <% row[:options].each do |option| %>
+      <button type="submit" name="option" value="<%= option %>" class="fp-q-option"><%= option %></button>
+    <% end %>
+    <button type="submit" class="fp-q-send"><%= row[:options].any? ? t("flightplan.questions.widget.send_text") : t("flightplan.questions.submit") %></button>
+  </div>
+<% end %>
+<p class="fp-q-note" data-fp-question-note role="status" hidden></p>

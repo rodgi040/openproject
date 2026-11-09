@@ -337,6 +337,10 @@
 }
 
 .fp-home-main {
+  /* OP#1706: position + contain machen die Hauptspalte zum Bezugsrahmen für absolut positionierte Kinder (z. B. .fp-sr);
+     sie ragen nicht mehr in #content-body und verlängern dort keine leere Scrollfläche. */
+  position: relative;
+  contain: paint;
   overflow: auto;
   min-width: 0;
   min-height: 0;
@@ -554,8 +558,9 @@
   background: var(--bgColor-default, #ffffff);
 }
 
+/* OP#1722: niedrigere Übersicht (und einklappbar), damit das Board bei 1440 × 900 ohne langes Scrollen sichtbar ist. */
 .fp-widget[data-fp-widget="overview"] {
-  --fp-widget-max: clamp(14rem, 40dvh, 24rem);
+  --fp-widget-max: clamp(9rem, 24dvh, 15rem);
 }
 
 .fp-widget[data-fp-widget="attention"] {
@@ -1032,7 +1037,8 @@ a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addon
 }
 
 .fp-widget[data-fp-widget="board"] {
-  --fp-widget-max: clamp(20rem, 60dvh, 40rem);
+  /* OP#1722: Höhe an den Viewport gekoppelt (abzüglich Kopfzeile, Titel, Statusleiste), damit mehr Karten sichtbar sind. */
+  --fp-widget-max: clamp(22rem, calc(100dvh - 19rem), 56rem);
   height: var(--fp-widget-max);
 }
 
@@ -1053,6 +1059,14 @@ a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addon
   flex: 0 0 15.5rem;
   max-height: 100%;
   min-height: 0;
+}
+
+/* OP#1706: Bezugsrahmen für absolut positionierte Kinder (.fp-sr) in den scrollenden Spalten. Ohne ihn lag der Bezugsrahmen
+   weit oben (.fp-home-main), die Spans blieben an ihrer Position tief in der Spalte und verlängerten die Hauptspalte. */
+.fp-column,
+.fp-column-cards,
+.fp-card {
+  position: relative;
 }
 
 .fp-widget[data-fp-widget="board"] .fp-column-cards {
@@ -1175,11 +1189,16 @@ a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addon
 }
 
 .fp-sr {
+  /* OP#1706: sr-only-Muster; das Element bleibt für Screenreader lesbar, hat aber keine eigene Fläche. */
   position: absolute;
   width: 1px;
   height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
   overflow: hidden;
   clip: rect(0 0 0 0);
+  clip-path: inset(50%);
   white-space: nowrap;
 }
 
@@ -1224,36 +1243,46 @@ a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addon
   font-size: 0.8rem;
 }
 
-/* Eine Zeile, waagerecht scrollbar: die Chips nehmen dem Board keine Höhe. */
+/* OP#1706: Die Familien umbrechen, alle sind ohne seitliches Scrollen erreichbar. Je Familie ein Block aus Überschrift und
+   Chips (die Chips einer Familie brechen innerhalb des Blocks um). */
 .fp-widget-chipsets {
   display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.25rem 0.75rem;
   flex: 1 1 100%;
   min-width: 0;
-  overflow-x: auto;
+  max-height: 6.5rem;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding-bottom: 0.1rem;
   scrollbar-width: thin;
 }
 
 .fp-widget-chipset {
   display: flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 0.15rem 0;
   border: 0;
   margin: 0;
   padding: 0;
   min-width: 0;
-  white-space: nowrap;
+  max-width: 100%;
 }
 
+/* OP#1706: Die Überschrift ist ein normales Flex-Kind statt float: left. Ein float-Legend ragte bei der letzten Familie
+   (Projekt-spezifisch) aus der Zeile und blieb ohne sichtbaren Namen. */
 .fp-widget-chipset legend {
-  float: left;
+  float: none;
+  display: block;
+  width: auto;
   padding: 0;
-  margin: 0.1rem 0.3rem 0 0;
+  margin: 0 0.3rem 0 0;
   font-size: 0.72rem;
   font-weight: 600;
+  white-space: nowrap;
   color: var(--fgColor-muted, #59636e);
 }
 
@@ -1279,4 +1308,70 @@ a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addon
 .fp-widget-chip:has(input:focus-visible) {
   outline: 2px dashed var(--fgColor-accent, #0969da);
   outline-offset: 1px;
+}
+
+/* OP#1722: Statusleiste aus „Laufende Agents“ und „Betrieb“. Kleine Kacheln nebeneinander; Suche, Filter und Inhalt stehen
+   in <details> und klappen bei Bedarf auf. */
+.fp-statusbar {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.fp-widget--compact {
+  max-height: none;
+}
+
+.fp-widget--compact .fp-widget-head {
+  padding-bottom: 0.25rem;
+}
+
+.fp-widget-fold > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0 0.75rem 0.4rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.fp-widget-fold-label {
+  color: var(--fgColor-accent, #0969da);
+  font-size: 0.8rem;
+}
+
+.fp-widget-fold[open] .fp-widget-body {
+  max-height: clamp(8rem, 28dvh, 16rem);
+}
+
+/* OP#1708: Rückfrage in einer Zeile von „Aufmerksamkeit“: kompakt, Fragetext und Optionen sichtbar. */
+.fp-q--inline {
+  margin: 0.35rem 0 0;
+  min-width: 14rem;
+}
+
+.fp-q--inline .fp-q-text {
+  margin: 0 0 0.25rem;
+  font-weight: 600;
+}
+
+/* OP#1706: aktive Label-Filter des Boards als kleine Chips mit Entfernen-Knopf neben dem „Labels“-Aufklappfeld. */
+.fp-active-labels {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+}
+
+.fp-active-label {
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--fgColor-accent, #0969da);
+  border-radius: 999px;
+  background: var(--bgColor-default, #ffffff);
+  color: var(--fgColor-accent, #0969da);
+  cursor: pointer;
 }

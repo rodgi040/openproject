@@ -1,0 +1,7 @@
+<%# OP#1722: Kompakte Statusleiste aus „Laufende Agents“ und „Betrieb“. Beide bleiben vollwertige Widgets (Suche, Filter,
+    Details), erscheinen aber als kleine Kacheln nebeneinander; die Details klappen per <details> auf. %>
+<div class="fp-statusbar" data-fp-statusbar>
+  <% Flightplan::WidgetFilters::STATUS_ORDER.each do |key| %>
+    <%= render "flightplan/dashboard/widgets/#{key}" %>
+  <% end %>
+</div>

@@ -2,7 +2,7 @@
     Browser über die gerenderten Karten; Vorauswahl aus alten Links (?board[...]) filtert auf dem Server. Verschieben per
     Drag & Drop über die Move-Route. %>
 <% board = @board_widget %>
-<% dash_path = ->(**opts) { controller.is_a?(::HomescreenController) ? root_path(**opts) : flightplan_dashboard_path(**opts) } %>
+<% dash_path = ->(**opts) { main_app.root_path(**opts) } %>
 <% board_link = ->(overrides = {}) { dash_path.(board: board.params_for(overrides).presence, anchor: "fp-widget-board") } %>
 <% tree = @dashboard ? @dashboard.project_tree : Flightplan::Dashboard.project_tree(User.current) %>
 <% paths = tree.to_h { |entry| [entry[:identifier], entry[:path]] } %>
@@ -41,7 +41,7 @@
 <% end %>
 <%= render layout: "flightplan/dashboard/widget",
            locals: { key: "board", title: t("flightplan.board.widget_title"), filters:, total: board.total_count, collapsible: true,
-                     head:, tools:, label_groups: board.label_groups, label_style: "chips", selected_scope: } do %>
+                     head:, tools:, label_groups: board.label_groups, selected_scope: } do %>
   <script type="application/json" data-fp-board-wikis><%= json_escape(board.wiki_links.to_json).html_safe %></script>
   <div id="fp-board-alert" class="fp-board-alert" role="alert" hidden></div>
   <div id="fp-board"
