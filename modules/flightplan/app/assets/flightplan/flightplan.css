@@ -1826,6 +1826,33 @@ a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addon
   color: var(--fgColor-done, #8250df);
 }
 
+/* OP#1802: Ein Agent arbeitet gerade im Chat dieses Tickets; ersetzt die Status-Pille, solange das gilt. */
+.fp-chat-ticket-working > .fp-chat-ticket-status {
+  display: none;
+}
+
+.fp-chat-ticket-working-pill {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0 0.45rem;
+  border: 1px solid var(--borderColor-success-muted, #4ac26b66);
+  border-radius: 999px;
+  background: var(--bgColor-success-muted, #dafbe1);
+  color: var(--fgColor-success, #1a7f37);
+}
+
+.fp-chat-ticket-working-pill::before {
+  content: "";
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-right: 0.3rem;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: middle;
+}
+
 .fp-chat-tickets-label {
   margin: 0.35rem 0.45rem 0.15rem;
   color: var(--fgColor-muted, #59636e);
