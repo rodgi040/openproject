@@ -558,6 +558,10 @@ function fpMountChat(root, frame) {
       sendState();
       return;
     }
+    if (data.type === "fp:activity" && bar) {
+      markWorking(data.tickets);
+      return;
+    }
     if (data.type === "fp:thread" && bar) {
       // OP#1778 Teil 2: T3 meldet den offenen Thread (Wechsel in der Thread-Leiste); links zieht die Markierung nach.
       // OP#1784: Die Ticketnummer hat T3 gegen die Server-Zuordnung geprüft; das Dashboard liefert den Kontext für genau
@@ -806,6 +810,46 @@ function fpMountChat(root, frame) {
       pill.className = "fp-chat-ticket-status fp-chat-ticket-status-" + String(context.status_key || "other").replace(/[^a-z]/g, "");
       pill.textContent = label;
     });
+  }
+
+  // OP#1802: T3 meldet per fp:activity, an welchen Tickets gerade ein Agent arbeitet (alle Threads, nicht nur der
+  // offene). Die Zeile zeigt dann „Agent arbeitet“ statt des OpenProject-Status. Der Status in OpenProject bleibt
+  // unberührt; endet die Arbeit, lädt die Zeile ihn frisch nach.
+  var working = {};
+  function markWorking(list) {
+    var next = {};
+    (Array.isArray(list) ? list : []).slice(0, 200).forEach(function (value) {
+      var id = Number(value);
+      if (Number.isInteger(id) && id > 0) next[id] = true;
+    });
+    var label = bar.dataset.workingLabel || "Agent arbeitet";
+    bar.querySelectorAll("[data-fp-chat-ticket]").forEach(function (node) {
+      var id = Number(node.dataset.fpChatTicket);
+      var pill = node.querySelector(".fp-chat-ticket-working-pill");
+      if (next[id] && !pill) {
+        pill = document.createElement("span");
+        pill.className = "fp-chat-ticket-working-pill";
+        pill.textContent = label;
+        node.appendChild(pill);
+        node.classList.add("fp-chat-ticket-working");
+      } else if (!next[id] && pill) {
+        pill.remove();
+        node.classList.remove("fp-chat-ticket-working");
+      }
+    });
+    Object.keys(working).forEach(function (id) { if (!next[id]) refreshStatus(Number(id)); });
+    working = next;
+  }
+
+  function refreshStatus(id) {
+    fetch("/flightplan/chat/context?wp=" + encodeURIComponent(id), {
+      headers: { "Accept": "application/json" },
+      credentials: "same-origin"
+    }).then(function (response) {
+      return response.ok ? response.json() : null;
+    }).then(function (payload) {
+      if (payload && payload.ok && payload.wp && Number(payload.wp.id) === id) markStatus(payload.wp);
+    }).catch(function () {});
   }
 
   if (bar && frame) {

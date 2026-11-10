@@ -3,7 +3,7 @@
 <% tickets = @chat_tickets ? @chat_tickets[:items] : [] %>
 <% total = @chat_tickets ? @chat_tickets[:total] : 0 %>
 <% visible_count = 6 %>
-<nav class="fp-chat-tickets" id="fp-chat-picker" data-fp-chat-tickets aria-label="<%= t("flightplan.home.tickets") %>">
+<nav class="fp-chat-tickets" id="fp-chat-picker" data-fp-chat-tickets data-working-label="<%= t("flightplan.home.ticket_status.working") %>" aria-label="<%= t("flightplan.home.tickets") %>">
   <div class="fp-chat-tickets-head">
     <span class="fp-chat-tickets-head-name"><%= t("flightplan.home.picker_title") %></span>
     <span class="fp-chat-tickets-head-title" data-fp-chat-tickets-count><%= total > tickets.size ? t("flightplan.home.running_partial", shown: tickets.size, total: total) : t("flightplan.home.running_total", total: total) %></span>

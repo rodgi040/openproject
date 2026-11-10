@@ -150,6 +150,7 @@ en:
         progress: "Active"
         waiting: "Waiting"
         review: "Review"
+        working: "Agent working"
       dashboard_admin_only: "Only administrators see the ADA Dashboard."
       dashboard_member: "Your open questions and the board of your projects are listed below."
     worklist:

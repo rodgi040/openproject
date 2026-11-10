@@ -142,6 +142,16 @@ RSpec.describe "Flightplan Startseite", :skip_csrf,
                             "NARROW_BELOW = 1300", "fp:home-show-chat", '"?layout=full"')
     end
 
+    it "marks tickets an agent is working on from fp:activity (OP#1802)" do
+      get "/flightplan/assets/flightplan.js"
+      js = response.body
+      expect(js).to include('data.type === "fp:activity"', "function markWorking(list)", "fp-chat-ticket-working-pill",
+                            "function refreshStatus(id)")
+      get "/"
+      picker = Nokogiri::HTML(response.body).at_css("[data-fp-chat-tickets]")
+      expect(picker["data-working-label"]).to eq(I18n.t("flightplan.home.ticket_status.working"))
+    end
+
     # OP#1711, OP#1778: Ticketauswahl des Chats, links im Dashboard statt über dem iframe.
     describe "ticket picker of the chat" do
       let(:project) { create(:project, public: false, members: { admin => create(:project_role, permissions: %i[view_work_packages]) }) }
