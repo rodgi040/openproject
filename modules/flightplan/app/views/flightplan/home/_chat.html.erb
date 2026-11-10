@@ -1,9 +1,15 @@
+<%# OP#1778: rechte Fläche des Splits. Nur das T3-iframe im Vollmodus (?layout=full: Seitenleiste, Kopfzeile wie
+    Standalone); die Ticketauswahl steht links (home/_chat_picker). Nur für Admins gerendert (dashboard/index). %>
 <section id="fp-home-chat"
          class="fp-home-chat"
          aria-label="<%= t("flightplan.home.chat") %>"
          data-chat-origin="<%= Flightplan::Workplace::CHAT_ORIGIN %>"
          data-csrf="<%= form_authenticity_token %>">
-  <% if User.current.admin? %>
+  <button type="button" class="fp-home-strip" data-fp-strip="split">
+    <span class="fp-home-strip-text"><%= t("flightplan.home.tab_chat") %></span>
+    <span class="fp-sr"><%= t("flightplan.home.strip_show") %></span>
+  </button>
+  <div class="fp-home-chat-body" data-fp-pane-body>
     <% if @questions_widget %>
       <script type="application/json" data-fp-chat-questions><%= json_escape(@questions_widget.chat_items.to_json).html_safe %></script>
     <% end %>
@@ -11,56 +17,10 @@
       <p><%= t("flightplan.workplace.chat_unreachable") %></p>
       <button type="button" data-fp-chat-reload><%= t("flightplan.workplace.chat_reload") %></button>
     </div>
-    <% tickets = @chat_tickets ? @chat_tickets[:items] : [] %>
-    <% total = @chat_tickets ? @chat_tickets[:total] : 0 %>
-    <% visible_count = 6 %>
-    <nav class="fp-chat-tickets" data-fp-chat-tickets aria-label="<%= t("flightplan.home.tickets") %>">
-      <button type="button" class="fp-chat-tickets-head" data-fp-chat-tickets-toggle aria-expanded="true">
-        <span class="fp-chat-tickets-head-title" data-fp-chat-tickets-count><%= total > tickets.size ? t("flightplan.home.running_partial", shown: tickets.size, total: total) : t("flightplan.home.running_total", total: total) %></span>
-        <span class="fp-chat-tickets-head-active" data-fp-chat-active data-prefix="<%= t("flightplan.home.active_prefix") %>" data-new="<%= t("flightplan.home.active_new") %>"><%= t("flightplan.home.active_prefix") %>: <%= t("flightplan.home.active_new") %></span>
-        <span aria-hidden="true" data-fp-chat-tickets-arrow>&#9662;</span>
-      </button>
-      <div class="fp-chat-tickets-body" data-fp-chat-tickets-body>
-        <button type="button" class="fp-chat-ticket fp-chat-ticket-new" data-fp-chat-new aria-current="true">
-          <%= t("flightplan.home.new_chat") %>
-        </button>
-        <% if tickets.empty? %>
-          <p class="fp-chat-tickets-empty" data-fp-chat-tickets-empty><%= t("flightplan.home.no_running_tickets") %></p>
-        <% else %>
-          <ul class="fp-chat-ticket-list" data-fp-chat-ticket-list>
-            <% tickets.each_with_index do |ticket, index| %>
-              <li<%= " hidden data-fp-chat-more".html_safe if index >= visible_count %>>
-                <a class="fp-chat-ticket"
-                   href="<%= Flightplan::Workplace::CHAT_ORIGIN %>/chat/embed/<%= ticket[:id] %>"
-                   data-fp-chat-ticket="<%= ticket[:id] %>"
-                   data-subject="<%= ticket[:subject] %>"
-                   title="<%= ticket[:status] %>: <%= ticket[:subject] %>">
-                  <span class="fp-chat-ticket-id">#<%= ticket[:id] %></span>
-                  <span class="fp-chat-ticket-title"><%= ticket[:subject] %></span>
-                  <span class="fp-chat-ticket-status fp-chat-ticket-status-<%= ticket[:key] %>"><%= t("flightplan.home.ticket_status.#{ticket[:key]}") %></span>
-                </a>
-              </li>
-            <% end %>
-          </ul>
-          <% if tickets.size > visible_count %>
-            <button type="button" class="fp-chat-tickets-more" data-fp-chat-more-toggle aria-expanded="false">
-              <%= total > tickets.size ? t("flightplan.home.more_tickets_of", count: tickets.size - visible_count, total: total) : t("flightplan.home.more_tickets", count: tickets.size - visible_count) %>
-            </button>
-          <% end %>
-        <% end %>
-        <div class="fp-chat-recent" data-fp-chat-recent hidden>
-          <span class="fp-chat-recent-label"><%= t("flightplan.home.recent_tickets") %></span>
-          <ul class="fp-chat-ticket-list" data-fp-chat-recent-list></ul>
-        </div>
-      </div>
-    </nav>
-    <p class="fp-chat-loading" data-fp-chat-loading data-template="<%= t("flightplan.home.opening", id: "__ID__") %>" role="status" hidden></p>
     <iframe class="fp-home-frame"
             data-fp-home-frame
             hidden
             title="<%= t("flightplan.home.chat") %>"
-            data-src="<%= Flightplan::Workplace::CHAT_ORIGIN %>/chat/"></iframe>
-  <% else %>
-    <p class="fp-dash-hint" data-fp-chat-admin-only><%= t("flightplan.home.chat_admin_only") %></p>
-  <% end %>
+            data-src="<%= Flightplan::Workplace::CHAT_ORIGIN %>/chat/?layout=full"></iframe>
+  </div>
 </section>

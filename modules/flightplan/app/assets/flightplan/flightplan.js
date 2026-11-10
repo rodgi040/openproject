@@ -469,9 +469,17 @@ function fpMountChat(root, frame) {
       });
   }
 
+  // OP#1778: Auf der Startseite gehören Rückfragen nur zum gewählten Ticket in den Chat; ohne Ticket zeigt T3 nichts
+  // Ticketbezogenes (beantwortet werden sie links im Widget „Rückfragen“).
+  function frameQuestions() {
+    if (!bar) return questions;
+    var id = wp && Number(wp.id);
+    return id ? questions.filter(function (item) { return Number(item.work_package_id) === id; }) : [];
+  }
+
   function sendState() {
     if (wp && wp.id) post({ type: "fp:context", wp: wp });
-    post({ type: "fp:questions", items: questions });
+    post({ type: "fp:questions", items: frameQuestions() });
     sendEvents();
     if (wp && Number(wp.id) !== eventsFor) pollEvents();
   }
@@ -606,9 +614,11 @@ function fpMountChat(root, frame) {
     else post({ type: "fp:context", wp: wp });
   });
 
-  // OP#1711: Ticketleiste der Startseite. Ein Klick lädt /chat/embed/<id> (T3 holt oder legt den Thread je Ticket an,
-  // idempotent); "Neuer Chat" lädt /chat/. Titel sind untrusted und gelangen nur per textContent in die Seite.
-  var bar = root.querySelector("[data-fp-chat-tickets]");
+  // OP#1711/OP#1778: Ticketauswahl der Startseite (links im Dashboard, nicht mehr über dem iframe). Ein Klick lädt
+  // /chat/embed/<id>?layout=full (T3 holt oder legt den Thread je Ticket an, idempotent, und zeigt ihn mit Seitenleiste);
+  // "Neuer Chat" lädt /chat/?layout=full. Titel sind untrusted und gelangen nur per textContent in die Seite.
+  var bar = root.id === "fp-home-chat" ? document.querySelector("[data-fp-chat-tickets]") : null;
+  var layout = bar ? "?layout=full" : "";
   var recentKey = "fp-chat-recent-tickets";
 
   function readRecent() {
@@ -655,7 +665,7 @@ function fpMountChat(root, frame) {
       var id = document.createElement("span");
       var title = document.createElement("span");
       link.className = "fp-chat-ticket";
-      link.href = origin + "/chat/embed/" + Number(item.id);
+      link.href = origin + "/chat/embed/" + Number(item.id) + layout;
       link.setAttribute("data-fp-chat-ticket", String(Number(item.id)));
       link.setAttribute("data-subject", String(item.subject || ""));
       id.className = "fp-chat-ticket-id";
@@ -683,10 +693,10 @@ function fpMountChat(root, frame) {
   }
 
   // Live-Prüfung fp.20: nach einem Klick bleibt der Rahmen einige Sekunden leer; der Hinweis steht bis zum Laden.
-  var loading = root.querySelector("[data-fp-chat-loading]");
+  var loading = (bar || root).querySelector("[data-fp-chat-loading]");
   function showLoading(url) {
     if (!loading) return;
-    var match = /\/embed\/(\d+)$/.exec(url);
+    var match = /\/embed\/(\d+)(?:\?|$)/.exec(url);
     if (!match) {
       loading.hidden = true;
       return;
@@ -713,7 +723,8 @@ function fpMountChat(root, frame) {
     if (!fromBoard || !wp || Number(wp.id) !== Number(id)) wp = { id: Number(id), subject: subject };
     markActive(id);
     rememberTicket(id, subject);
-    loadFrame(origin + "/chat/embed/" + Number(id));
+    loadFrame(origin + "/chat/embed/" + Number(id) + layout);
+    if (!fromBoard) window.dispatchEvent(new CustomEvent("fp:home-show-chat"));
   }
 
   if (bar && frame) {
@@ -728,38 +739,247 @@ function fpMountChat(root, frame) {
       } else if (fresh) {
         wp = {};
         markActive(null);
-        loadFrame(origin + "/chat/");
+        loadFrame(origin + "/chat/" + layout);
+        window.dispatchEvent(new CustomEvent("fp:home-show-chat"));
       } else if (more) {
         var open = more.getAttribute("aria-expanded") !== "true";
         bar.querySelectorAll("li[data-fp-chat-more]").forEach(function (node) { node.hidden = !open; });
         more.setAttribute("aria-expanded", open ? "true" : "false");
-        more.textContent = open ? "−" : more.dataset.label;
+        more.textContent = open ? more.dataset.less : more.dataset.label;
       }
     });
-    var head = bar.querySelector("[data-fp-chat-tickets-toggle]");
-    var body = bar.querySelector("[data-fp-chat-tickets-body]");
-    var openKey = "fp-chat-tickets-open";
-    function setBarOpen(open, persist) {
-      body.hidden = !open;
-      head.setAttribute("aria-expanded", open ? "true" : "false");
-      head.querySelector("[data-fp-chat-tickets-arrow]").textContent = open ? "\u25B4" : "\u25BE";
-      if (persist) {
-        try { window.localStorage.setItem(openKey, open ? "1" : "0"); } catch (error) { /* ohne Speicher */ }
-      }
-    }
-    if (head && body) {
-      var stored = null;
-      try { stored = window.localStorage.getItem(openKey); } catch (error) { stored = null; }
-      var small = typeof window.matchMedia === "function" && window.matchMedia("(max-height: 700px)").matches;
-      setBarOpen(stored === null ? !small : stored === "1", false);
-      head.addEventListener("click", function () {
-        setBarOpen(head.getAttribute("aria-expanded") !== "true", true);
-      });
-    }
     var moreButton = bar.querySelector("[data-fp-chat-more-toggle]");
     if (moreButton) moreButton.dataset.label = moreButton.textContent.trim();
     renderRecent();
   }
+}
+
+// OP#1778: Split-Screen der Startseite. Ansicht (Dashboard groß / geteilt / T3 Code groß), Breite der linken Fläche,
+// Reiter im schmalen Fenster und das OpenProject-Menü als Symbolleiste. Zustand nur im localStorage dieses Browsers.
+function fpHomeSplit(home) {
+  var KEYS = { view: "fp-home-view", tab: "fp-home-tab", split: "fp-home-split", menu: "fp-home-menu" };
+  var VIEWS = ["dashboard", "split", "chat"];
+  var NARROW_BELOW = 1300;
+  var RAIL_BELOW = 1700;
+  var MIN_LEFT = 288;
+  var MIN_RIGHT = 384;
+  var handle = home.querySelector("[data-fp-split-handle]");
+  var hint = home.querySelector("[data-fp-view-hint]");
+  var views = home.querySelector("[data-fp-views]");
+  var tabs = home.querySelector("[data-fp-tabs]");
+  var mainMenu = document.getElementById("main");
+
+  function read(key) {
+    try { return window.localStorage.getItem(key); } catch (error) { return null; }
+  }
+  function write(key, value) {
+    try {
+      if (value === null) window.localStorage.removeItem(key);
+      else window.localStorage.setItem(key, value);
+    } catch (error) { /* ohne Speicher gilt der Standard */ }
+  }
+
+  var state = {
+    view: VIEWS.indexOf(read(KEYS.view)) === -1 ? "split" : read(KEYS.view),
+    tab: read(KEYS.tab) === "chat" ? "chat" : "dashboard",
+    split: Number(read(KEYS.split)) > 0 && Number(read(KEYS.split)) < 1 ? Number(read(KEYS.split)) : 0.5,
+    narrow: false
+  };
+
+  function width() {
+    return home.getBoundingClientRect().width || 1;
+  }
+  function clampSplit(value) {
+    var total = width();
+    var min = Math.min(0.5, MIN_LEFT / total);
+    var max = Math.max(0.5, 1 - MIN_RIGHT / total);
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function railWanted() {
+    if (!mainMenu || mainMenu.classList.contains("hidden-navigation") || window.innerWidth < 1012) return false;
+    if (read(KEYS.menu) === "open") return false;
+    if (window.innerWidth >= RAIL_BELOW && !state.narrow) return false;
+    return state.narrow ? true : state.view !== "dashboard";
+  }
+
+  // OpenProject merkt sich Breite und Zustand seines Menüs im localStorage und misst beim ersten Start die aktuelle
+  // Breite. Die Symbolleiste darf diesen Wert nie werden: ohne gemerkten Wert gilt der OpenProject-Standard 280 px.
+  var OP_WIDTH = "openProject-mainMenuWidth";
+  var OP_COLLAPSED = "openProject-mainMenuCollapsed";
+  var opMenu = { width: read(OP_WIDTH), collapsed: read(OP_COLLAPSED) };
+  if (!(Number(opMenu.width) >= 120)) {
+    opMenu.width = "280";
+    write(OP_WIDTH, opMenu.width);
+  }
+  function keepOpMenu() {
+    if (Number(read(OP_WIDTH)) < 120 && opMenu.width) write(OP_WIDTH, opMenu.width);
+    if (opMenu.collapsed !== null && read(OP_COLLAPSED) !== opMenu.collapsed) write(OP_COLLAPSED, opMenu.collapsed);
+  }
+  window.addEventListener("pagehide", keepOpMenu);
+
+  var menuToggle = null;
+  function syncMenu() {
+    if (!mainMenu) return;
+    var rail = railWanted();
+    keepOpMenu();
+    mainMenu.classList.toggle("fp-menu-rail", rail);
+    var top = mainMenu.querySelector(".main-menu--top-container");
+    if (!top) return;
+    if (!menuToggle) {
+      menuToggle = document.createElement("button");
+      menuToggle.type = "button";
+      menuToggle.className = "fp-menu-toggle";
+      menuToggle.setAttribute("data-fp-menu-toggle", "1");
+      menuToggle.innerHTML = '<svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16"><path fill="currentColor" d="M2 3.75A1.75 1.75 0 0 1 3.75 2h8.5A1.75 1.75 0 0 1 14 3.75v8.5A1.75 1.75 0 0 1 12.25 14h-8.5A1.75 1.75 0 0 1 2 12.25Zm1.75-.25a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25H6v-9Zm3.75 0v9h4.75a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25Z"/></svg>';
+      menuToggle.addEventListener("click", function () {
+        write(KEYS.menu, mainMenu.classList.contains("fp-menu-rail") ? "open" : null);
+        syncMenu();
+      });
+      top.insertBefore(menuToggle, top.firstChild);
+    }
+    var label = rail ? home.dataset.menuRail : home.dataset.menuUnrail;
+    menuToggle.setAttribute("aria-label", label);
+    menuToggle.title = label;
+    menuToggle.hidden = !rail && read(KEYS.menu) !== "open";
+  }
+
+  function apply() {
+    state.narrow = window.innerWidth < NARROW_BELOW;
+    home.dataset.fpNarrow = state.narrow ? "1" : "0";
+    home.dataset.fpView = state.view;
+    home.dataset.fpTab = state.tab;
+    if (views) {
+      views.hidden = state.narrow;
+      views.querySelectorAll("[data-fp-view-set]").forEach(function (button) {
+        button.setAttribute("aria-pressed", button.dataset.fpViewSet === state.view ? "true" : "false");
+      });
+    }
+    if (tabs) {
+      tabs.hidden = !state.narrow;
+      tabs.querySelectorAll("[data-fp-tab]").forEach(function (button) {
+        var on = button.dataset.fpTab === state.tab;
+        button.setAttribute("aria-selected", on ? "true" : "false");
+        button.tabIndex = on ? 0 : -1;
+      });
+    }
+    if (hint) hint.textContent = state.narrow ? hint.dataset.narrow : hint.dataset.split;
+    var value = clampSplit(state.split);
+    home.style.setProperty("--fp-split", (value * 100).toFixed(2) + "%");
+    if (handle) {
+      var percent = Math.round(value * 100);
+      handle.setAttribute("aria-valuenow", String(percent));
+      handle.setAttribute("aria-valuetext", "Dashboard " + percent + " %, T3 Code " + (100 - percent) + " %");
+    }
+    syncMenu();
+  }
+
+  function setView(view) {
+    if (VIEWS.indexOf(view) === -1) return;
+    state.view = view;
+    write(KEYS.view, view);
+    apply();
+  }
+  function setTab(tab) {
+    state.tab = tab === "chat" ? "chat" : "dashboard";
+    write(KEYS.tab, state.tab);
+    apply();
+  }
+  function setSplit(value, persist) {
+    state.split = clampSplit(value);
+    if (persist) write(KEYS.split, state.split.toFixed(4));
+    apply();
+  }
+
+  if (views) {
+    views.addEventListener("click", function (event) {
+      var button = event.target.closest("[data-fp-view-set]");
+      if (button) setView(button.dataset.fpViewSet);
+    });
+  }
+  if (tabs) {
+    tabs.addEventListener("click", function (event) {
+      var button = event.target.closest("[data-fp-tab]");
+      if (button) setTab(button.dataset.fpTab);
+    });
+    tabs.addEventListener("keydown", function (event) {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      setTab(state.tab === "chat" ? "dashboard" : "chat");
+      var current = tabs.querySelector("[aria-selected='true']");
+      if (current) current.focus();
+    });
+  }
+  home.querySelectorAll("[data-fp-strip]").forEach(function (strip) {
+    strip.addEventListener("click", function () { setView("split"); });
+  });
+
+  if (handle) {
+    handle.addEventListener("pointerdown", function (event) {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      handle.setPointerCapture(event.pointerId);
+      home.classList.add("is-dragging");
+      var left = home.getBoundingClientRect().left;
+      function move(next) {
+        setSplit((next.clientX - left) / width(), false);
+      }
+      function up() {
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", up);
+        handle.removeEventListener("pointercancel", up);
+        home.classList.remove("is-dragging");
+        write(KEYS.split, state.split.toFixed(4));
+      }
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", up);
+      handle.addEventListener("pointercancel", up);
+    });
+    handle.addEventListener("dblclick", function () {
+      write(KEYS.split, null);
+      setSplit(0.5, false);
+    });
+    handle.addEventListener("keydown", function (event) {
+      var step = event.shiftKey ? 0.1 : 0.02;
+      var next = null;
+      if (event.key === "ArrowLeft") next = state.split - step;
+      else if (event.key === "ArrowRight") next = state.split + step;
+      else if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = 1;
+      else if (event.key === "Enter") next = 0.5;
+      if (next === null) return;
+      event.preventDefault();
+      setSplit(next, true);
+    });
+  }
+
+  document.addEventListener("keydown", function (event) {
+    if (!event.altKey || event.ctrlKey || event.metaKey) return;
+    var view = { "1": "dashboard", "2": "split", "3": "chat" }[event.key];
+    if (!view) return;
+    event.preventDefault();
+    if (state.narrow) setTab(view === "chat" ? "chat" : "dashboard");
+    else setView(view);
+  });
+
+  // Auswahl eines Tickets oder „Neuer Chat“ links: der Chat wird sichtbar, falls er gerade eingeklappt ist.
+  window.addEventListener("fp:home-show-chat", function () {
+    if (state.narrow) setTab("chat");
+    else if (state.view === "dashboard") setView("split");
+  });
+
+  var resizeTimer = null;
+  window.addEventListener("resize", function () {
+    window.clearTimeout(resizeTimer);
+    resizeTimer = window.setTimeout(apply, 80);
+  });
+  if (mainMenu && typeof MutationObserver === "function") {
+    new MutationObserver(function () {
+      var rail = railWanted();
+      if (mainMenu.classList.contains("fp-menu-rail") !== rail) syncMenu();
+    }).observe(mainMenu, { attributes: true, attributeFilter: ["class"] });
+  }
+  apply();
 }
 
 (function () {
@@ -767,6 +987,8 @@ function fpMountChat(root, frame) {
   if (workplace) fpMountChat(workplace, workplace.querySelector("[data-fp-workplace-frame]"));
   var home = document.getElementById("fp-home-chat");
   if (home) fpMountChat(home, home.querySelector("[data-fp-home-frame]"));
+  var split = document.querySelector("#fp-home[data-fp-chat='1']");
+  if (split) fpHomeSplit(split);
 })();
 
 (function () {

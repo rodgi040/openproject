@@ -1,0 +1,49 @@
+<%# OP#1778: Ticketauswahl für den Chat, links im Dashboard (vorher OP#1711 als Leiste über dem iframe). Gleiche
+    data-Attribute wie vorher; die Logik steht nur in fpMountChat (flightplan.js). Titel sind untrusted: nur escaped. %>
+<% tickets = @chat_tickets ? @chat_tickets[:items] : [] %>
+<% total = @chat_tickets ? @chat_tickets[:total] : 0 %>
+<% visible_count = 6 %>
+<nav class="fp-chat-tickets" id="fp-chat-picker" data-fp-chat-tickets aria-label="<%= t("flightplan.home.tickets") %>">
+  <div class="fp-chat-tickets-head">
+    <span class="fp-chat-tickets-head-name"><%= t("flightplan.home.picker_title") %></span>
+    <span class="fp-chat-tickets-head-title" data-fp-chat-tickets-count><%= total > tickets.size ? t("flightplan.home.running_partial", shown: tickets.size, total: total) : t("flightplan.home.running_total", total: total) %></span>
+    <span class="fp-chat-tickets-head-active" data-fp-chat-active data-prefix="<%= t("flightplan.home.active_prefix") %>" data-new="<%= t("flightplan.home.active_new") %>"><%= t("flightplan.home.active_prefix") %>: <%= t("flightplan.home.active_new") %></span>
+    <% if tickets.size > visible_count %>
+      <button type="button" class="fp-chat-tickets-more" data-fp-chat-more-toggle aria-expanded="false" data-less="<%= t("flightplan.home.show_less") %>">
+        <%= t("flightplan.home.show_all") %>
+      </button>
+    <% end %>
+  </div>
+  <div class="fp-chat-tickets-body" data-fp-chat-tickets-body>
+    <button type="button" class="fp-chat-ticket fp-chat-ticket-new" data-fp-chat-new aria-current="true">
+      <span class="fp-chat-ticket-plus" aria-hidden="true">+</span>
+      <span class="fp-chat-ticket-title"><%= t("flightplan.home.new_chat_no_ticket") %></span>
+      <span class="fp-chat-ticket-flag" aria-hidden="true"><%= t("flightplan.home.active_flag") %></span>
+    </button>
+    <p class="fp-chat-loading" data-fp-chat-loading data-template="<%= t("flightplan.home.opening", id: "__ID__") %>" role="status" hidden></p>
+    <% if tickets.empty? %>
+      <p class="fp-chat-tickets-empty" data-fp-chat-tickets-empty><%= t("flightplan.home.no_running_tickets") %></p>
+    <% else %>
+      <p class="fp-chat-tickets-label"><%= t("flightplan.home.pick_next") %></p>
+      <ul class="fp-chat-ticket-list" data-fp-chat-ticket-list>
+        <% tickets.each_with_index do |ticket, index| %>
+          <li<%= " hidden data-fp-chat-more".html_safe if index >= visible_count %>>
+            <a class="fp-chat-ticket"
+               href="<%= Flightplan::Workplace::CHAT_ORIGIN %>/chat/embed/<%= ticket[:id] %>?layout=full"
+               data-fp-chat-ticket="<%= ticket[:id] %>"
+               data-subject="<%= ticket[:subject] %>"
+               title="<%= ticket[:status] %>: <%= ticket[:subject] %>">
+              <span class="fp-chat-ticket-id">#<%= ticket[:id] %></span>
+              <span class="fp-chat-ticket-title"><%= ticket[:subject] %></span>
+              <span class="fp-chat-ticket-status fp-chat-ticket-status-<%= ticket[:key] %>"><%= t("flightplan.home.ticket_status.#{ticket[:key]}") %></span>
+            </a>
+          </li>
+        <% end %>
+      </ul>
+    <% end %>
+    <div class="fp-chat-recent" data-fp-chat-recent hidden>
+      <p class="fp-chat-tickets-label fp-chat-recent-label"><%= t("flightplan.home.recent_tickets") %></p>
+      <ul class="fp-chat-ticket-list" data-fp-chat-recent-list></ul>
+    </div>
+  </div>
+</nav>
