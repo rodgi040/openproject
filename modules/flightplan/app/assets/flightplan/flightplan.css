@@ -316,29 +316,51 @@
   }
 }
 
-/* OP#1671: Home screen (/) and /flightplan/dashboard. Main column on the left (dashboard, later widgets), chat column on
-   the right. Same height rule as the workplace (OP#1669): the grid fills exactly the rest of #content-body, both columns
-   scroll on their own, the chat is never taller than the visible area (--fp-home-fit). The column switch follows the
-   width of #content-body (container query), because OpenProject folds its side menu away on narrow windows. */
+/* OP#1778: Split-Screen der Startseite (/). Links das Dashboard, rechts T3 Code im Vollmodus (iframe), dazwischen eine
+   verschiebbare Trennlinie, oben eine schmale Ansichtsleiste. Das Raster füllt genau den Rest von #content-body
+   (OpenProject gibt ihm die Viewport-Höhe minus Kopfzeile, Höhenregel aus OP#1669), jede Fläche scrollt für sich; T3
+   bekommt die volle Höhe ohne Außenabstand. Breite der linken Fläche: --fp-split (JS, localStorage). Unter 1300 px
+   Fensterbreite (data-fp-narrow) gibt es statt des Splits zwei Reiter. Ohne Admin-Recht (data-fp-chat="0") kein Split. */
 #content-body:has(> #fp-home) {
   display: flex;
   flex-direction: column;
   container-type: inline-size;
 }
 
+#content-body:has(> #fp-home[data-fp-chat="1"]) {
+  padding: 0;
+  overflow: hidden;
+}
+
 .fp-home {
-  --fp-home-fit: calc(100dvh - var(--header-height, 55px) - 1.5rem);
+  --fp-home-fit: calc(100dvh - var(--header-height, 55px));
+  --fp-split: 50%;
+  --fp-split-bar: 0.5rem;
+  --fp-split-strip: 2.25rem;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(20rem, min(36%, 36rem));
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
-  gap: 1rem;
   flex: 1 1 0;
-  min-height: min(24rem, var(--fp-home-fit));
+  min-height: min(20rem, var(--fp-home-fit));
+}
+
+.fp-home[data-fp-chat="1"] {
+  grid-template-areas: "bar bar bar" "main sep chat";
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: clamp(18rem, var(--fp-split), calc(100% - 24rem - var(--fp-split-bar))) var(--fp-split-bar) minmax(0, 1fr);
+}
+
+.fp-home[data-fp-chat="1"][data-fp-view="dashboard"] {
+  grid-template-columns: minmax(0, 1fr) 0 var(--fp-split-strip);
+}
+
+.fp-home[data-fp-chat="1"][data-fp-view="chat"] {
+  grid-template-columns: var(--fp-split-strip) 0 minmax(0, 1fr);
 }
 
 .fp-home-main {
-  /* OP#1706: position + contain machen die Hauptspalte zum Bezugsrahmen für absolut positionierte Kinder (z. B. .fp-sr);
-     sie ragen nicht mehr in #content-body und verlängern dort keine leere Scrollfläche. */
+  /* OP#1706: position + contain machen die Fläche zum Bezugsrahmen für absolut positionierte Kinder (.fp-sr). */
+  grid-area: main;
   position: relative;
   contain: paint;
   overflow: auto;
@@ -346,38 +368,303 @@
   min-height: 0;
 }
 
+.fp-home[data-fp-chat="1"] .fp-home-main-body {
+  padding: 0.5rem 1rem 0.75rem;
+}
+
 .fp-home-chat {
+  grid-area: chat;
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
 }
 
+.fp-home-chat-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .fp-home-frame {
+  display: block;
   flex: 1 1 auto;
   width: 100%;
   min-height: 0;
-  border: 1px solid var(--borderColor-default, #d0d7de);
-  border-radius: 8px;
+  border: 0;
 }
 
-@container (max-width: 50rem) {
-  /* One column: dashboard first, then the chat, its frame exactly as high as the visible area. */
-  .fp-home {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto;
-    flex: 0 0 auto;
-    min-height: 0;
-  }
+/* Während des Ziehens schluckt das iframe keine Mausereignisse. */
+.fp-home.is-dragging {
+  cursor: col-resize;
+  user-select: none;
+}
 
-  .fp-home-main {
-    overflow: visible;
-  }
+.fp-home.is-dragging .fp-home-frame {
+  pointer-events: none;
+}
 
-  .fp-home-frame {
-    flex: 0 0 auto;
-    height: var(--fp-home-fit);
-  }
+.fp-home-separator {
+  grid-area: sep;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+  touch-action: none;
+  background: var(--bgColor-muted, #f6f8fa);
+  border-inline: 1px solid var(--borderColor-default, #d0d7de);
+}
+
+.fp-home-separator:hover,
+.fp-home.is-dragging .fp-home-separator {
+  background: var(--bgColor-accent-muted, #ddf4ff);
+}
+
+.fp-home-separator:focus-visible {
+  outline: 2px solid var(--fgColor-accent, #0969da);
+  outline-offset: -2px;
+}
+
+.fp-home-separator-grip {
+  width: 4px;
+  height: 2.25rem;
+  border-radius: 999px;
+  background: radial-gradient(circle, var(--fgColor-muted, #59636e) 1.5px, transparent 1.6px) 0 0 / 4px 6px repeat-y;
+}
+
+.fp-home-viewbar {
+  grid-area: bar;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 1.9rem;
+  padding: 0.15rem 0.75rem;
+  border-bottom: 1px solid var(--borderColor-default, #d0d7de);
+  background: var(--bgColor-muted, #f6f8fa);
+  font-size: 0.8rem;
+}
+
+.fp-home-viewbar-label,
+.fp-home-viewbar-hint {
+  color: var(--fgColor-muted, #59636e);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fp-home-viewbar-hint {
+  justify-self: end;
+}
+
+.fp-home-views {
+  display: inline-flex;
+}
+
+.fp-home-views button {
+  padding: 0.1rem 0.85rem;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  background: var(--bgColor-default, #fff);
+  color: var(--fgColor-default, #1f2328);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fp-home-views button + button {
+  border-left: 0;
+}
+
+.fp-home-views button:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.fp-home-views button:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.fp-home-views button[aria-pressed="true"] {
+  background: var(--bgColor-accent-emphasis, #0969da);
+  border-color: var(--bgColor-accent-emphasis, #0969da);
+  color: var(--fgColor-onEmphasis, #fff);
+}
+
+.fp-home-views button:focus-visible,
+.fp-home-tabs button:focus-visible,
+.fp-home-strip:focus-visible {
+  outline: 2px solid var(--fgColor-accent, #0969da);
+  outline-offset: 1px;
+}
+
+.fp-home-tabs {
+  display: flex;
+  gap: 0.25rem;
+  grid-column: 1 / 3;
+  align-self: end;
+}
+
+.fp-home-tabs[hidden] {
+  display: none;
+}
+
+.fp-home-tabs button {
+  padding: 0.4rem 1.25rem;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--fgColor-muted, #59636e);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fp-home-tabs button[aria-selected="true"] {
+  color: var(--fgColor-default, #1f2328);
+  border-bottom-color: var(--bgColor-accent-emphasis, #0969da);
+}
+
+/* Eingeklappte Fläche: ein schmaler Streifen mit Beschriftung, Klick holt den Split zurück. */
+.fp-home-strip {
+  display: none;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 0;
+  padding: 0.75rem 0;
+  border: 0;
+  background: var(--bgColor-muted, #f6f8fa);
+  color: var(--fgColor-default, #1f2328);
+  font: inherit;
+  font-weight: 600;
+  writing-mode: vertical-rl;
+  cursor: pointer;
+}
+
+.fp-home-strip:hover {
+  background: var(--bgColor-accent-muted, #ddf4ff);
+}
+
+.fp-home[data-fp-view="dashboard"]:not([data-fp-narrow="1"]) .fp-home-chat > .fp-home-strip,
+.fp-home[data-fp-view="chat"]:not([data-fp-narrow="1"]) .fp-home-main > .fp-home-strip {
+  display: flex;
+}
+
+.fp-home[data-fp-view="chat"]:not([data-fp-narrow="1"]) .fp-home-main {
+  display: flex;
+  overflow: hidden;
+  border-right: 1px solid var(--borderColor-default, #d0d7de);
+}
+
+.fp-home[data-fp-view="dashboard"]:not([data-fp-narrow="1"]) .fp-home-chat {
+  border-left: 1px solid var(--borderColor-default, #d0d7de);
+}
+
+.fp-home[data-fp-view="dashboard"]:not([data-fp-narrow="1"]) .fp-home-chat > [data-fp-pane-body],
+.fp-home[data-fp-view="chat"]:not([data-fp-narrow="1"]) .fp-home-main > [data-fp-pane-body],
+.fp-home[data-fp-view="dashboard"] .fp-home-separator,
+.fp-home[data-fp-view="chat"] .fp-home-separator {
+  display: none;
+}
+
+/* Schmales Fenster: Reiter „Dashboard | T3 Code“, immer nur eine Fläche in voller Breite und Höhe. */
+.fp-home[data-fp-chat="1"][data-fp-narrow="1"] {
+  grid-template-areas: "bar" "pane";
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.fp-home[data-fp-narrow="1"] .fp-home-main,
+.fp-home[data-fp-narrow="1"] .fp-home-chat {
+  grid-area: pane;
+}
+
+.fp-home[data-fp-narrow="1"] .fp-home-separator,
+.fp-home[data-fp-narrow="1"][data-fp-tab="chat"] .fp-home-main,
+.fp-home[data-fp-narrow="1"]:not([data-fp-tab="chat"]) .fp-home-chat {
+  display: none;
+}
+
+.fp-home[data-fp-narrow="1"] .fp-home-viewbar {
+  padding-block: 0;
+}
+
+.fp-home[data-fp-narrow="1"] .fp-home-viewbar-label {
+  display: none;
+}
+
+.fp-home[data-fp-narrow="1"] .fp-home-tabs {
+  grid-row: 1;
+}
+
+/* OpenProject blendet sein Menü unter 1012 px selbst aus und zeigt dann oben links einen eigenen Knopf. */
+#main.hidden-navigation .fp-home-viewbar {
+  padding-left: 3.5rem;
+}
+
+/* OpenProject-Seitenmenü als Symbolleiste, solange die Startseite geteilt ist und der Platz knapp (flightplan.js setzt
+   die Klasse nur auf / und nur, wenn der Nutzer das Menü nicht selbst ausgeklappt hat). Die Einträge bleiben Links. */
+#main.fp-menu-rail #main-menu {
+  /* OpenProject setzt die Breite inline (main-menu-toggle.service); die Symbolleiste überdeckt sie nur hier. */
+  width: 3.25rem !important;
+  min-width: 3.25rem !important;
+}
+
+#main.fp-menu-rail #menu-sidebar {
+  padding-inline: 0.25rem;
+}
+
+#main.fp-menu-rail .main-menu--top-container > :not([data-fp-menu-toggle]),
+#main.fp-menu-rail .main-menu--resizer,
+#main.fp-menu-rail .op-menu--item-title,
+#main.fp-menu-rail .main-menu-toggler,
+#main.fp-menu-rail .main-menu--children-menu-header,
+#main.fp-menu-rail .main-menu--children {
+  display: none !important;
+}
+
+#main.fp-menu-rail .op-menu--item-action {
+  display: flex;
+  justify-content: center;
+  width: 2.75rem;
+  margin-inline: auto;
+  padding-inline: 0 !important;
+}
+
+#main.fp-menu-rail .op-menu--item-action svg {
+  margin: 0 !important;
+}
+
+#main.fp-menu-rail #projects-wrapper {
+  width: 100%;
+}
+
+.fp-menu-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  margin: 0.5rem auto;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--fgColor-muted, #59636e);
+  cursor: pointer;
+}
+
+.fp-menu-toggle[hidden] {
+  display: none;
+}
+
+.fp-menu-toggle:hover,
+.fp-menu-toggle:focus-visible {
+  background: var(--control-transparent-bgColor-hover, #eaeef2);
+}
+
+#main:not(.fp-menu-rail) .fp-menu-toggle {
+  margin: 0.5rem 0 0.25rem auto;
 }
 
 /* ADA Dashboard (S4). Keine externen Hosts, keine Schriften von außen. */
@@ -1380,11 +1667,55 @@ a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addon
   cursor: pointer;
 }
 
-/* OP#1711: Ticketleiste über dem Startseiten-Chat. Kompakte Liste mit max-height, bleibt bei Zoom 150/200 % bedienbar. */
+/* OP#1778: Ticketauswahl für den Chat, links oben im Dashboard (Element „Chat“). Kompakt, die Liste zeigt 6 Zeilen,
+   „Alle anzeigen“ klappt den Rest auf; bleibt bei Zoom 150/200 % bedienbar. */
 .fp-chat-tickets {
-  flex: 0 0 auto;
-  margin-bottom: 0.4rem;
+  margin: 0.25rem 0 0.75rem;
+  padding: 0.5rem 0.6rem 0.4rem;
+  border: 1px solid var(--borderColor-accent-muted, #54aeff66);
+  border-radius: 8px;
+  background: var(--bgColor-default, #fff);
+  box-shadow: 0 0 0 3px var(--bgColor-accent-muted, #ddf4ff);
   font-size: 0.85rem;
+}
+
+.fp-chat-tickets-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0 0.15rem 0.35rem;
+}
+
+.fp-chat-tickets-head-name {
+  flex: 0 0 auto;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.fp-chat-tickets-head-title {
+  flex: 0 0 auto;
+  color: var(--fgColor-muted, #59636e);
+}
+
+.fp-chat-tickets-head-active {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fgColor-muted, #59636e);
+}
+
+.fp-chat-tickets-more {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--fgColor-accent, #0969da);
+  cursor: pointer;
+  font: inherit;
 }
 
 .fp-chat-ticket-list {
@@ -1395,15 +1726,17 @@ a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addon
 
 .fp-chat-ticket {
   display: flex;
-  align-items: baseline;
-  gap: 0.4rem;
+  align-items: center;
+  gap: 0.45rem;
   min-width: 0;
-  padding: 0.2rem 0.4rem;
+  min-height: 1.75rem;
+  padding: 0.15rem 0.45rem;
   border-radius: 6px;
+  border: 0;
+  border-left: 3px solid transparent;
   color: inherit;
   text-decoration: none;
   background: none;
-  border: 0;
   width: 100%;
   text-align: left;
   font: inherit;
@@ -1413,16 +1746,49 @@ a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addon
 .fp-chat-ticket:hover,
 .fp-chat-ticket:focus-visible {
   background: var(--bgColor-muted, #f6f8fa);
+  text-decoration: none;
 }
 
 .fp-chat-ticket[aria-current="true"] {
   background: var(--bgColor-accent-muted, #ddf4ff);
+  border-left-color: var(--bgColor-accent-emphasis, #0969da);
   font-weight: 600;
+}
+
+.fp-chat-ticket-new {
+  margin-bottom: 0.25rem;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-left-width: 3px;
+  font-weight: 600;
+}
+
+.fp-chat-ticket-new[aria-current="true"] {
+  border-color: var(--bgColor-accent-emphasis, #0969da);
+}
+
+.fp-chat-ticket-plus {
+  flex: 0 0 auto;
+  font-weight: 700;
+}
+
+.fp-chat-ticket-flag {
+  display: none;
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fgColor-accent, #0969da);
+}
+
+.fp-chat-ticket[aria-current="true"] .fp-chat-ticket-flag {
+  display: inline;
 }
 
 .fp-chat-ticket-id {
   flex: 0 0 auto;
-  color: var(--fgColor-muted, #59636e);
+  color: var(--fgColor-accent, #0969da);
+  font-weight: 600;
 }
 
 .fp-chat-ticket-title {
@@ -1435,67 +1801,373 @@ a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addon
 
 .fp-chat-ticket-status {
   flex: 0 0 auto;
-  font-size: 0.75rem;
-  padding: 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0 0.45rem;
   border: 1px solid var(--borderColor-default, #d0d7de);
   border-radius: 999px;
 }
 
-.fp-chat-tickets-empty,
-.fp-chat-recent-label {
-  margin: 0.2rem 0.4rem;
+.fp-chat-ticket-status-progress {
+  background: var(--bgColor-success-muted, #dafbe1);
+  border-color: var(--borderColor-success-muted, #4ac26b66);
+  color: var(--fgColor-success, #1a7f37);
+}
+
+.fp-chat-ticket-status-waiting {
+  background: var(--bgColor-attention-muted, #fff8c5);
+  border-color: var(--borderColor-attention-muted, #d4a72c66);
+  color: var(--fgColor-attention, #9a6700);
+}
+
+.fp-chat-ticket-status-review {
+  background: var(--bgColor-done-muted, #fbefff);
+  border-color: var(--borderColor-done-muted, #c297ff66);
+  color: var(--fgColor-done, #8250df);
+}
+
+.fp-chat-tickets-label {
+  margin: 0.35rem 0.45rem 0.15rem;
+  color: var(--fgColor-muted, #59636e);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.fp-chat-tickets-empty {
+  margin: 0.2rem 0.45rem;
   color: var(--fgColor-muted, #59636e);
 }
 
-.fp-chat-tickets-more {
-  margin: 0.2rem 0.4rem;
-  background: none;
-  border: 0;
-  color: var(--fgColor-accent, #0969da);
-  cursor: pointer;
-  font: inherit;
+.fp-chat-loading {
+  margin: 0 0.45rem 0.2rem;
+  font-size: 0.8rem;
+  color: var(--fgColor-muted, #59636e);
 }
 
-.fp-chat-tickets-head {
+.fp-chat-loading[hidden] {
+  display: none;
+}
+
+.fp-home-main .fp-chat-offline {
+  margin: 0.75rem;
+}
+
+/* OP#1778 Teil 2: Kopf der linken Fläche mit Umschalter Board | Arbeitsliste. */
+.fp-home-head {
   display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  width: 100%;
-  min-width: 0;
-  padding: 0.2rem 0.4rem;
-  background: none;
-  border: 0;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.25rem 0 0.6rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--borderColor-default, #d0d7de);
 }
 
-.fp-chat-tickets-head-title {
-  flex: 0 0 auto;
+.fp-home-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 1.25rem;
   font-weight: 600;
 }
 
-.fp-chat-tickets-head-active {
+.fp-home-leftviews {
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+}
+
+.fp-home-leftviews button {
+  padding: 0.15rem 0.7rem;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  background: var(--bgColor-default, #fff);
+  color: var(--fgColor-default, #1f2328);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fp-home-leftviews button + button {
+  border-left: 0;
+}
+
+.fp-home-leftviews button:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.fp-home-leftviews button:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.fp-home-leftviews button[aria-pressed="true"] {
+  background: var(--bgColor-accent-muted, #ddf4ff);
+  border-color: var(--borderColor-accent-emphasis, #0969da);
+  color: var(--fgColor-accent, #0969da);
+}
+
+.fp-chat-next {
+  flex: 0 0 auto;
+  padding: 0.05rem 0.55rem;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: 6px;
+  background: var(--bgColor-default, #fff);
+  color: var(--fgColor-default, #1f2328);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fp-chat-next:hover,
+.fp-chat-next:focus-visible {
+  background: var(--bgColor-muted, #f6f8fa);
+}
+
+/* Arbeitsliste: Reiter, eine Filterzeile, Gruppen mit Zeilen. Kein waagerechtes Scrollen. */
+.fp-worklist {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 0.875rem;
+}
+
+.fp-wl-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--borderColor-default, #d0d7de);
+}
+
+.fp-wl-tabs button {
+  padding: 0.35rem 0.8rem;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--fgColor-muted, #59636e);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fp-wl-tabs button[aria-selected="true"] {
+  color: var(--fgColor-default, #1f2328);
+  border-bottom-color: var(--bgColor-accent-emphasis, #0969da);
+}
+
+.fp-wl-count {
+  display: inline-block;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--bgColor-neutral-muted, #afb8c133);
+  color: var(--fgColor-muted, #59636e);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.fp-wl-tabs button[aria-selected="true"] .fp-wl-count {
+  background: var(--bgColor-accent-emphasis, #0969da);
+  color: var(--fgColor-onEmphasis, #fff);
+}
+
+.fp-wl-filter {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+}
+
+.fp-wl-filter input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.fp-wl-filter select {
+  flex: 0 1 12rem;
+  min-width: 0;
+}
+
+.fp-wl-group {
+  margin-bottom: 0.25rem;
+}
+
+.fp-wl-group-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  padding: 0.4rem 0.5rem;
+  background: var(--bgColor-muted, #f6f8fa);
+  border-top: 1px solid var(--borderColor-default, #d0d7de);
+}
+
+.fp-wl-hint {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--fgColor-muted, #59636e);
+  font-size: 0.8rem;
 }
 
-.fp-chat-tickets-body {
-  max-height: 8.5rem;
-  overflow-y: auto;
+.fp-wl-all {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fgColor-accent, #0969da);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
 }
 
-.fp-chat-tickets-body[hidden] {
+.fp-wl-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.fp-wl-row {
+  padding: 0.35rem 0.5rem 0.35rem 0.6rem;
+  border-bottom: 1px solid var(--borderColor-muted, #d8dee4);
+  border-left: 3px solid transparent;
+  cursor: pointer;
+}
+
+.fp-wl-row:hover,
+.fp-wl-row:focus-visible {
+  background: var(--bgColor-muted, #f6f8fa);
+  outline: none;
+}
+
+.fp-wl-row:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--fgColor-accent, #0969da);
+}
+
+.fp-wl-row[aria-current="true"] {
+  background: var(--bgColor-accent-muted, #ddf4ff);
+  border-left-color: var(--bgColor-accent-emphasis, #0969da);
+}
+
+.fp-wl-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.fp-wl-id {
+  flex: 0 0 auto;
+  font-weight: 700;
+}
+
+.fp-wl-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.fp-wl-age,
+.fp-wl-meta-inline {
+  flex: 0 0 auto;
+  color: var(--fgColor-muted, #59636e);
+  font-size: 0.8rem;
+}
+
+.fp-wl-flag {
+  display: none;
+  flex: 0 0 auto;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--bgColor-accent-emphasis, #0969da);
+  color: var(--fgColor-onEmphasis, #fff);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.fp-wl-row[aria-current="true"] .fp-wl-flag {
+  display: inline;
+}
+
+.fp-wl-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.45rem;
+  padding-left: 0.1rem;
+  color: var(--fgColor-muted, #59636e);
+  font-size: 0.8rem;
+}
+
+.fp-wl-label,
+.fp-wl-type,
+.fp-wl-prio,
+.fp-wl-warn {
+  padding: 0 0.4rem;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: 999px;
+  font-size: 0.72rem;
+}
+
+.fp-wl-prio {
+  border-color: var(--borderColor-severe-muted, #fb8f4466);
+  color: var(--fgColor-severe, #bc4c00);
+}
+
+.fp-wl-warn {
+  background: var(--bgColor-attention-muted, #fff8c5);
+  border-color: var(--borderColor-attention-muted, #d4a72c66);
+  color: var(--fgColor-attention, #9a6700);
+}
+
+.fp-wl-empty {
+  margin: 0.35rem 0.6rem;
+  color: var(--fgColor-muted, #59636e);
+}
+
+.fp-wl-empty[hidden],
+.fp-wl-row[hidden] {
   display: none;
 }
 
-.fp-chat-loading {
+.fp-wl-projects {
+  list-style: none;
   margin: 0;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-  opacity: 0.8;
+  padding: 0;
+}
+
+.fp-wl-project {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 0;
+  border-bottom: 1px solid var(--borderColor-muted, #d8dee4);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fp-wl-project:hover,
+.fp-wl-project:focus-visible {
+  background: var(--bgColor-muted, #f6f8fa);
+}
+
+.fp-wl-keys {
+  margin: 0.5rem 0 0;
+  color: var(--fgColor-muted, #59636e);
+  font-size: 0.75rem;
+}
+
+@container (max-width: 30rem) {
+  .fp-wl-keys,
+  .fp-wl-hint {
+    display: none;
+  }
 }

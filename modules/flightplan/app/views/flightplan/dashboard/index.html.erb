@@ -1,31 +1,97 @@
 <% html_title(t("flightplan.dashboard.title")) %>
+<% with_chat = User.current.admin? %>
 
-<%=
-  render(Primer::OpenProject::PageHeader.new) do |header|
-    header.with_title { t("flightplan.dashboard.title") }
-    header.with_breadcrumbs(nil)
-  end
-%>
+<%# OP#1778: Split-Screen. Links das Dashboard, rechts T3 Code im Vollmodus; Ansichtsleiste oben, Trennlinie dazwischen.
+    Ohne Admin-Recht kein Chat und kein Split: das Dashboard nimmt die ganze Breite. %>
+<div id="fp-home"
+     class="fp-home"
+     data-fp-chat="<%= with_chat ? "1" : "0" %>"
+     data-fp-view="split"
+     data-menu-rail="<%= t("flightplan.home.menu_rail") %>"
+     data-menu-unrail="<%= t("flightplan.home.menu_unrail") %>">
+  <% if with_chat %>
+    <nav class="fp-home-viewbar" data-fp-viewbar aria-label="<%= t("flightplan.home.view_label") %>">
+      <span class="fp-home-viewbar-label" aria-hidden="true"><%= t("flightplan.home.view_label") %></span>
+      <div class="fp-home-views" role="group" aria-label="<%= t("flightplan.home.view_label") %>" data-fp-views>
+        <button type="button" data-fp-view-set="dashboard" aria-pressed="false" title="Alt+1"><%= t("flightplan.home.view_dashboard") %></button>
+        <button type="button" data-fp-view-set="split" aria-pressed="true" title="Alt+2"><%= t("flightplan.home.view_split") %></button>
+        <button type="button" data-fp-view-set="chat" aria-pressed="false" title="Alt+3"><%= t("flightplan.home.view_chat") %></button>
+      </div>
+      <div class="fp-home-tabs" role="tablist" aria-label="<%= t("flightplan.home.view_label") %>" data-fp-tabs hidden>
+        <button type="button" role="tab" id="fp-home-tab-dashboard" aria-controls="fp-home-main" aria-selected="true" data-fp-tab="dashboard"><%= t("flightplan.home.tab_dashboard") %></button>
+        <button type="button" role="tab" id="fp-home-tab-chat" aria-controls="fp-home-chat" aria-selected="false" data-fp-tab="chat"><%= t("flightplan.home.tab_chat") %></button>
+      </div>
+      <span class="fp-home-viewbar-hint" data-fp-view-hint
+            data-split="<%= t("flightplan.home.split_hint") %>"
+            data-narrow="<%= t("flightplan.home.narrow_hint") %>"><%= t("flightplan.home.split_hint") %></span>
+    </nav>
+  <% end %>
 
-<div id="fp-home" class="fp-home">
-  <section class="fp-home-main" aria-label="<%= t("flightplan.home.main") %>">
-    <% if @dashboard %>
-      <%= render "flightplan/dashboard/dashboard" %>
-    <% else %>
-      <div class="fp-dash-hint" data-fp-dashboard-admin-only>
-        <p><%= t("flightplan.home.dashboard_admin_only") %></p>
-        <p><%= t("flightplan.home.dashboard_member") %></p>
-      </div>
-      <div class="fp-dash" id="fp-questions-only">
-        <div class="fp-widgets" data-fp-widgets>
-          <% Flightplan::WidgetFilters::MEMBER_ORDER.each do |key| %>
-            <% next if key == "questions" && !@questions_widget %>
-            <% next if key == "board" && !@board_widget %>
-            <%= render "flightplan/dashboard/widgets/#{key}" %>
-          <% end %>
-        </div>
-      </div>
+  <section class="fp-home-main" id="fp-home-main" aria-label="<%= t("flightplan.home.main") %>">
+    <% if with_chat %>
+      <button type="button" class="fp-home-strip" data-fp-strip="split">
+        <span class="fp-home-strip-text"><%= t("flightplan.home.tab_dashboard") %></span>
+        <span class="fp-sr"><%= t("flightplan.home.strip_show") %></span>
+      </button>
     <% end %>
+    <div class="fp-home-main-body" data-fp-pane-body>
+      <% with_worklist = with_chat && @dashboard && @board_widget %>
+      <div class="fp-home-head">
+        <h1 class="fp-home-title"><%= t("flightplan.dashboard.title") %></h1>
+        <% if with_worklist %>
+          <%# OP#1778 Teil 2: zwei Ansichten der linken Fläche, Wahl im localStorage (fp-home-left), Standard Board. %>
+          <div class="fp-home-leftviews" role="group" aria-label="<%= t("flightplan.home.left_view") %>" data-fp-left-views>
+            <button type="button" data-fp-left-set="board" aria-pressed="true"><%= t("flightplan.home.left_board") %></button>
+            <button type="button" data-fp-left-set="worklist" aria-pressed="false"><%= t("flightplan.home.left_worklist") %></button>
+          </div>
+        <% end %>
+      </div>
+      <% if with_chat %>
+        <%= render "flightplan/home/chat_picker" %>
+      <% else %>
+        <p class="fp-dash-hint" data-fp-chat-admin-only><%= t("flightplan.home.chat_admin_only") %></p>
+      <% end %>
+      <% if @dashboard %>
+        <div data-fp-left-view="board">
+          <%= render "flightplan/dashboard/dashboard" %>
+        </div>
+        <% if with_worklist %>
+          <div data-fp-left-view="worklist" hidden>
+            <%= render "flightplan/dashboard/worklist" %>
+          </div>
+        <% end %>
+      <% else %>
+        <div class="fp-dash-hint" data-fp-dashboard-admin-only>
+          <p><%= t("flightplan.home.dashboard_admin_only") %></p>
+          <p><%= t("flightplan.home.dashboard_member") %></p>
+        </div>
+        <div class="fp-dash" id="fp-questions-only">
+          <div class="fp-widgets" data-fp-widgets>
+            <% Flightplan::WidgetFilters::MEMBER_ORDER.each do |key| %>
+              <% next if key == "questions" && !@questions_widget %>
+              <% next if key == "board" && !@board_widget %>
+              <%= render "flightplan/dashboard/widgets/#{key}" %>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+    </div>
   </section>
-  <%= render "flightplan/home/chat" %>
+
+  <% if with_chat %>
+    <div class="fp-home-separator"
+         role="separator"
+         tabindex="0"
+         aria-orientation="vertical"
+         aria-controls="fp-home-main"
+         aria-label="<%= t("flightplan.home.separator") %>"
+         aria-valuemin="0"
+         aria-valuemax="100"
+         aria-valuenow="50"
+         title="<%= t("flightplan.home.split_hint") %>"
+         data-fp-split-handle>
+      <span class="fp-home-separator-grip" aria-hidden="true"></span>
+    </div>
+    <%= render "flightplan/home/chat" %>
+  <% end %>
 </div>
