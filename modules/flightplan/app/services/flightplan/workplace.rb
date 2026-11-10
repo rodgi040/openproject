@@ -43,6 +43,11 @@ module Flightplan
       @work_package = work_package
     end
 
+    # OP#1784: nur der Kontext für den Chat (Kopfleiste in T3), ohne Verlauf und Baum.
+    def self.context_for(user:, work_package:)
+      new(user, work_package).context_hash
+    end
+
     def load
       journals = @work_package.journals.includes(:user, :data, :customizable_journals).order(:version).to_a
       notes = comment_journals
@@ -244,16 +249,27 @@ module Flightplan
       end
     end
 
+    public
+
     def context_hash
+      status = @work_package.status.name
+      key = Flightplan::ChatTickets::SHORT_KEYS[status]
       {
         id: @work_package.id,
         subject: @work_package.subject,
         project: @work_package.project.identifier,
-        status: @work_package.status.name,
+        project_name: @work_package.project.name,
+        status:,
+        status_key: key&.to_s,
+        status_label: key ? I18n.t("flightplan.home.ticket_status.#{key}") : nil,
+        type: @work_package.type&.name,
+        priority: @work_package.priority&.name,
+        assignee: @work_package.assigned_to&.name,
+        updated_at: @work_package.updated_at&.iso8601,
         labels: self.class.custom_list(@work_package, "Labels"),
         url: Rails.application.routes.url_helpers.work_package_path(@work_package),
         description: preview_text
-      }
+      }.compact
     end
   end
 end

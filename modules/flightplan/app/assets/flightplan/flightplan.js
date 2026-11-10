@@ -477,8 +477,17 @@ function fpMountChat(root, frame) {
     return id ? questions.filter(function (item) { return Number(item.work_package_id) === id; }) : [];
   }
 
+  // OP#1784: Thread, den T3 für das Ticket gemeldet hat; fp:context trägt ihn mit, T3 bindet den Kontext genau daran.
+  var wpThread = null;
+
+  function contextMessage() {
+    var message = { type: "fp:context", wp: wp };
+    if (wpThread && Number(wpThread.id) === Number(wp.id)) message.threadId = wpThread.thread;
+    return message;
+  }
+
   function sendState() {
-    if (wp && wp.id) post({ type: "fp:context", wp: wp });
+    if (wp && wp.id) post(contextMessage());
     post({ type: "fp:questions", items: frameQuestions() });
     sendEvents();
     if (wp && Number(wp.id) !== eventsFor) pollEvents();
@@ -551,7 +560,10 @@ function fpMountChat(root, frame) {
     }
     if (data.type === "fp:thread" && bar) {
       // OP#1778 Teil 2: T3 meldet den offenen Thread (Wechsel in der Thread-Leiste); links zieht die Markierung nach.
+      // OP#1784: Die Ticketnummer hat T3 gegen die Server-Zuordnung geprüft; das Dashboard liefert den Kontext für genau
+      // diesen Thread nach (fp:context mit threadId). Kennt es das Ticket nicht, bleibt die Kopfleiste in T3 weg.
       var shown = Number(data.ticketId) > 0 ? Number(data.ticketId) : 0;
+      var thread = typeof data.threadId === "string" ? data.threadId : null;
       shownTicket = shown;
       if (shown) {
         if (!wp || Number(wp.id) !== shown) {
@@ -559,9 +571,12 @@ function fpMountChat(root, frame) {
           wp = { id: shown, subject: known ? known.dataset.subject : "" };
         }
         markActive(shown);
+        loadContext(shown, thread);
       } else {
         wp = {};
-        markActive(null, !!data.threadId);
+        wpThread = null;
+        markActive(null, !!thread);
+        sendState();
       }
       return;
     }
@@ -629,7 +644,8 @@ function fpMountChat(root, frame) {
     // OP#1778: Zeilen der Arbeitsliste (reveal) holen den Chat dazu in den Blick.
     if (bar) {
       openTicket(detail.id, detail.subject, true);
-      if (detail.reveal) window.dispatchEvent(new CustomEvent("fp:home-show-chat"));
+      // OP#1784: im schmalen Fenster wechselt auch eine Board-Karte auf den Reiter „T3 Code“.
+      window.dispatchEvent(new CustomEvent("fp:home-show-chat", { detail: { narrowOnly: !detail.reveal } }));
     } else {
       post({ type: "fp:context", wp: wp });
     }
@@ -749,10 +765,47 @@ function fpMountChat(root, frame) {
   function openTicket(id, subject, fromBoard) {
     if (!bar || !frame || !Number(id)) return;
     if (!fromBoard || !wp || Number(wp.id) !== Number(id)) wp = { id: Number(id), subject: subject };
+    wpThread = null;
     markActive(id);
     rememberTicket(id, subject);
     loadFrame(origin + "/chat/embed/" + Number(id) + layout);
+    loadContext(id, null);
     if (!fromBoard) window.dispatchEvent(new CustomEvent("fp:home-show-chat"));
+  }
+
+  // OP#1784: voller Kontext (Typ, Priorität, Zuweisung, Status wie links) für die Kopfleiste in T3. Nur offene,
+  // sichtbare Tickets; sonst kommt kein fp:context.
+  var contextSeq = 0;
+  function loadContext(id, thread) {
+    var seq = ++contextSeq;
+    fetch("/flightplan/chat/context?wp=" + encodeURIComponent(Number(id)), {
+      headers: { "Accept": "application/json" },
+      credentials: "same-origin"
+    }).then(function (response) {
+      return response.ok ? response.json() : null;
+    }).then(function (payload) {
+      if (seq !== contextSeq || !payload || !payload.ok || !payload.wp) return;
+      if (!wp || Number(wp.id) !== Number(id) || Number(payload.wp.id) !== Number(id)) return;
+      wp = payload.wp;
+      if (thread) wpThread = { id: Number(id), thread: thread };
+      markStatus(wp);
+      sendState();
+    }).catch(function () {});
+  }
+
+  // OP#1784: die Zeile des aktiven Tickets links zeigt denselben Status wie die Kopfleiste in T3.
+  function markStatus(context) {
+    var label = context.status_label || context.status;
+    if (!label) return;
+    bar.querySelectorAll("[data-fp-chat-ticket='" + Number(context.id) + "']").forEach(function (node) {
+      var pill = node.querySelector(".fp-chat-ticket-status");
+      if (!pill) {
+        pill = document.createElement("span");
+        node.appendChild(pill);
+      }
+      pill.className = "fp-chat-ticket-status fp-chat-ticket-status-" + String(context.status_key || "other").replace(/[^a-z]/g, "");
+      pill.textContent = label;
+    });
   }
 
   if (bar && frame) {
@@ -766,6 +819,8 @@ function fpMountChat(root, frame) {
         openTicket(link.dataset.fpChatTicket, link.dataset.subject);
       } else if (fresh) {
         wp = {};
+        wpThread = null;
+        contextSeq++;
         markActive(null);
         loadFrame(origin + "/chat/" + layout);
         window.dispatchEvent(new CustomEvent("fp:home-show-chat"));
@@ -1009,9 +1064,10 @@ function fpHomeSplit(home) {
   });
 
   // Auswahl eines Tickets oder „Neuer Chat“ links: der Chat wird sichtbar, falls er gerade eingeklappt ist.
-  window.addEventListener("fp:home-show-chat", function () {
+  window.addEventListener("fp:home-show-chat", function (event) {
+    var narrowOnly = !!(event.detail && event.detail.narrowOnly);
     if (state.narrow) setTab("chat");
-    else if (state.view === "dashboard") setView("split");
+    else if (!narrowOnly && state.view === "dashboard") setView("split");
   });
 
   var resizeTimer = null;
