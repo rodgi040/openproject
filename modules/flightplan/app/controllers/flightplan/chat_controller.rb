@@ -3,6 +3,7 @@
 module Flightplan
   # OP#1711 Wave 2: Verlauf und Kommentar für den Chat-Thread der Startseite. Nur JSON.
   #
+  # context: Ticket-Kontext für die Kopfleiste in T3 (nur Admin, Session, nur offene sichtbare Tickets).
   # events: liest Kommentare, Statuswechsel und Rückfragen eines sichtbaren Tickets (nur Admin, Session).
   # comment: schreibt einen Kommentar mit Marker "[aus Chat]" im Namen des angemeldeten Menschen. Wie die Startfreigabe
   # nur mit Session und Rails-CSRF-Token, nur Admin UND Login in FLIGHTPLAN_HUMAN_LOGINS (fail-closed), nie mit
@@ -14,7 +15,7 @@ module Flightplan
     before_action :require_admin_json
     before_action :reject_agent_user, only: :comment
     before_action :reject_non_human, only: :comment
-    no_authorization_required! :events, :comment
+    no_authorization_required! :events, :comment, :ticket_context
 
     def events
       work_package = visible_work_package
@@ -24,6 +25,15 @@ module Flightplan
         after_question: params[:after_question], after_question_at: params[:after_question_at]
       )
       render json: payload.merge(ok: true, work_package_id: work_package.id)
+    end
+
+    # OP#1784: Kontext eines offenen, sichtbaren Tickets für die Kopfleiste in T3 (Antwort auf fp:thread). Geschlossene
+    # oder unsichtbare Tickets bekommen 404: dann zeigt T3 keine Leiste statt einer falschen.
+    def ticket_context
+      work_package = WorkPackage.visible(User.current).includes(:status).find_by(id: params[:wp])
+      return render(json: { ok: false }, status: :not_found) if work_package.nil? || work_package.status.is_closed?
+
+      render json: { ok: true, wp: Flightplan::Workplace.context_for(user: User.current, work_package:) }
     end
 
     def comment
