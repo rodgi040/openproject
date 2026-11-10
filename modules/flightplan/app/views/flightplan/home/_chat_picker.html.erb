@@ -7,7 +7,8 @@
   <div class="fp-chat-tickets-head">
     <span class="fp-chat-tickets-head-name"><%= t("flightplan.home.picker_title") %></span>
     <span class="fp-chat-tickets-head-title" data-fp-chat-tickets-count><%= total > tickets.size ? t("flightplan.home.running_partial", shown: tickets.size, total: total) : t("flightplan.home.running_total", total: total) %></span>
-    <span class="fp-chat-tickets-head-active" data-fp-chat-active data-prefix="<%= t("flightplan.home.active_prefix") %>" data-new="<%= t("flightplan.home.active_new") %>"><%= t("flightplan.home.active_prefix") %>: <%= t("flightplan.home.active_new") %></span>
+    <span class="fp-chat-tickets-head-active" data-fp-chat-active data-prefix="<%= t("flightplan.home.active_prefix") %>" data-new="<%= t("flightplan.home.active_new") %>" data-free="<%= t("flightplan.home.active_free") %>"><%= t("flightplan.home.active_prefix") %>: <%= t("flightplan.home.active_new") %></span>
+    <button type="button" class="fp-chat-next" data-fp-chat-next title="<%= t("flightplan.home.next_hint") %>"><%= t("flightplan.home.next") %></button>
     <% if tickets.size > visible_count %>
       <button type="button" class="fp-chat-tickets-more" data-fp-chat-more-toggle aria-expanded="false" data-less="<%= t("flightplan.home.show_less") %>">
         <%= t("flightplan.home.show_all") %>

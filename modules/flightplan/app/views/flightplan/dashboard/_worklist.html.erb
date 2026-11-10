@@ -1,0 +1,103 @@
+<%# OP#1778 Teil 2: Arbeitsliste (Variante B), zweite Ansicht der linken Fläche. Bündelt die Spalten des Boards nach der
+    Frage des Nutzers zu Reitern; Daten sind dieselben Karten wie im Board-Widget (@board_widget, keine eigene Abfrage).
+    Zeilenklick nimmt das Ticket in den Chat (fp:card-selected), die Nummer öffnet den Arbeitsplatz. Titel sind untrusted. %>
+<% board = @board_widget %>
+<% columns = board.columns.index_by(&:key) %>
+<% tabs = Flightplan::Worklist::TABS %>
+<% open_projects = board.columns.reject { |column| Flightplan::Board::CLOSED_COLUMNS.include?(column.key) }
+                        .flat_map(&:cards).group_by(&:project_identifier) %>
+<% project_rows = open_projects.map { |identifier, cards| { identifier:, name: cards.first.project_name, bereich: cards.first.bereich, count: cards.size } }
+                               .sort_by { |row| [row[:bereich].to_s, row[:name].to_s.downcase] } %>
+<section class="fp-worklist" id="fp-worklist" data-fp-worklist aria-label="<%= t("flightplan.worklist.title") %>">
+  <div class="fp-wl-tabs" role="tablist" aria-label="<%= t("flightplan.worklist.title") %>">
+    <% tabs.each_with_index do |(tab, keys), index| %>
+      <% count = tab == "projekte" ? project_rows.size : keys.sum { |key| columns[key]&.count.to_i } %>
+      <button type="button" role="tab" id="fp-wl-tab-<%= tab %>" aria-controls="fp-wl-panel-<%= tab %>"
+              aria-selected="<%= index.zero? %>" tabindex="<%= index.zero? ? 0 : -1 %>" data-fp-wl-tab="<%= tab %>" title="<%= index + 1 %>">
+        <%= t("flightplan.worklist.tabs.#{tab}") %> <span class="fp-wl-count"><%= count %></span>
+      </button>
+    <% end %>
+  </div>
+  <div class="fp-wl-filter">
+    <input type="search" class="fp-widget-search" data-fp-wl-search placeholder="<%= t("flightplan.worklist.search") %>" aria-label="<%= t("flightplan.worklist.search") %>">
+    <select class="fp-widget-select" data-fp-wl-project aria-label="<%= t("flightplan.widgets.scope") %>">
+      <option value=""><%= t("flightplan.widgets.scope_all") %></option>
+      <% project_rows.each do |row| %>
+        <option value="<%= row[:identifier] %>"><%= row[:name] %></option>
+      <% end %>
+    </select>
+  </div>
+  <div class="fp-wl-scroll" data-fp-wl-scroll>
+    <% tabs.each_with_index do |(tab, keys), index| %>
+      <div role="tabpanel" id="fp-wl-panel-<%= tab %>" aria-labelledby="fp-wl-tab-<%= tab %>" data-fp-wl-panel="<%= tab %>"<%= " hidden".html_safe unless index.zero? %>>
+        <% if tab == "projekte" %>
+          <ul class="fp-wl-projects">
+            <% project_rows.each do |row| %>
+              <li>
+                <button type="button" class="fp-wl-project" data-fp-wl-pick-project="<%= row[:identifier] %>">
+                  <span class="fp-wl-title"><%= row[:name] %></span>
+                  <span class="fp-wl-meta-inline"><%= Flightplan::Bereich.label_for(row[:bereich]) || row[:bereich] %></span>
+                  <span class="fp-wl-count"><%= t("flightplan.worklist.open_count", count: row[:count]) %></span>
+                </button>
+              </li>
+            <% end %>
+          </ul>
+        <% else %>
+          <% keys.each do |key| %>
+            <% column = columns[key] %>
+            <% next unless column %>
+            <% collapsed = Flightplan::Worklist::COLLAPSED.include?(key) %>
+            <section class="fp-wl-group" data-fp-wl-group="<%= key %>"<%= " data-collapsed".html_safe if collapsed %>>
+              <header class="fp-wl-group-head">
+                <strong><%= t("flightplan.board.columns.#{key}") %></strong>
+                <span class="fp-wl-count"><%= column.count %></span>
+                <span class="fp-wl-hint"><%= t("flightplan.worklist.hints.#{key}") %></span>
+                <% if column.cards.size > (collapsed ? 0 : Flightplan::Worklist::SHOWN) %>
+                  <button type="button" class="fp-wl-all" data-fp-wl-all aria-expanded="false"
+                          data-more="<%= t("flightplan.worklist.all", count: column.count) %>" data-less="<%= t("flightplan.worklist.less") %>">
+                    <%= t("flightplan.worklist.all", count: column.count) %>
+                  </button>
+                <% end %>
+              </header>
+              <% if column.cards.empty? %>
+                <p class="fp-wl-empty"><%= t("flightplan.worklist.empty.#{key}") %></p>
+              <% else %>
+                <ol class="fp-wl-rows">
+                  <% column.cards.each_with_index do |card, row_index| %>
+                    <% days = card.updated_at ? ((Time.current - card.updated_at) / 1.day).floor : nil %>
+                    <li class="fp-wl-row" tabindex="-1"
+                        data-fp-worklist-row
+                        data-id="<%= card.id %>"
+                        data-subject="<%= card.subject %>"
+                        data-project="<%= card.project_identifier %>"
+                        data-status="<%= column.status %>"
+                        data-labels="<%= card.label_names.to_json %>"
+                        data-url="<%= work_package_path(card.id) %>"
+                        data-search="<%= "##{card.id} #{card.subject} #{card.project_name}".downcase %>"
+                        <%= "hidden data-fp-wl-more".html_safe if collapsed || row_index >= Flightplan::Worklist::SHOWN %>>
+                      <div class="fp-wl-line">
+                        <%= link_to "##{card.id}", flightplan_workplace_path(card.id), class: "fp-wl-id", data: { turbo: false }, title: t("flightplan.worklist.open_ticket") %>
+                        <span class="fp-wl-title"><%= card.subject %></span>
+                        <span class="fp-wl-flag" aria-hidden="true"><%= t("flightplan.worklist.in_chat") %></span>
+                        <% if days %><span class="fp-wl-age" title="<%= card.updated_at.strftime("%d.%m.%Y %H:%M") %>"><%= days.zero? ? t("flightplan.worklist.today") : t("flightplan.worklist.days", count: days) %></span><% end %>
+                      </div>
+                      <div class="fp-wl-meta">
+                        <span><%= card.project_name %></span>
+                        <% if card.type_name.present? && card.type_name != "Aufgabe" %><span class="fp-wl-type"><%= card.type_name %></span><% end %>
+                        <% if card.priority && !card.priority.normal %><span class="fp-wl-prio"><%= card.priority.name %></span><% end %>
+                        <% card.chip_labels.first(2).each do |label| %><span class="fp-wl-label"><%= label[:name] %></span><% end %>
+                        <% if card.path_missing %><span class="fp-wl-warn"><%= t("flightplan.worklist.path_missing") %></span><% end %>
+                      </div>
+                    </li>
+                  <% end %>
+                </ol>
+              <% end %>
+            </section>
+          <% end %>
+        <% end %>
+      </div>
+    <% end %>
+    <p class="fp-wl-empty" data-fp-wl-nohit hidden><%= t("flightplan.worklist.no_hits") %></p>
+  </div>
+  <p class="fp-wl-keys"><%= t("flightplan.worklist.keys") %></p>
+</section>

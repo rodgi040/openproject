@@ -90,7 +90,7 @@ RSpec.describe "Flightplan Startseite", :skip_csrf,
     it "keeps the page title inside the left pane, so T3 Code gets the full height (OP#1778)" do
       get "/"
       expect(content.at_css("#fp-home > .fp-home-main").text).to include("ADA Dashboard")
-      expect(content.at_css("#fp-home > .fp-home-main .PageHeader")).to be_present
+      expect(content.at_css("#fp-home > .fp-home-main h1.fp-home-title").text).to eq("ADA Dashboard")
       expect(Nokogiri::HTML(response.body).css("#content-body > .PageHeader")).to be_empty
     end
 

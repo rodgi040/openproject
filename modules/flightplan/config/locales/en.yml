@@ -108,6 +108,11 @@ en:
     chat:
       saved_as_comment: "Saved as a comment on #%{id} – it arrives when the agent next reads the ticket."
     home:
+      left_view: "View of the left pane"
+      left_board: "Board"
+      left_worklist: "Work list"
+      next: "Next ▸"
+      next_hint: "Next ticket of the visible list into the chat (key .)"
       picker_title: "Chat"
       new_chat_no_ticket: "New chat without a ticket"
       active_flag: "active"
@@ -138,14 +143,55 @@ en:
       more_tickets_of: "more (%{count} of %{total})"
       running_partial: "Running: %{shown} of %{total}"
       running_total: "Running (%{total})"
-      active_new: "new chat"
-      active_prefix: "active"
+      active_new: "new chat (no ticket)"
+      active_prefix: "In chat"
+      active_free: "thread without a ticket"
       ticket_status:
         progress: "Active"
         waiting: "Waiting"
         review: "Review"
       dashboard_admin_only: "Only administrators see the ADA Dashboard."
       dashboard_member: "Your open questions and the board of your projects are listed below."
+    worklist:
+      title: "Work list"
+      tabs:
+        fuer_dich: "For you"
+        laeuft: "Running"
+        triage: "Triage"
+        projekte: "Projects"
+      search: "Search … (/)"
+      all: "all %{count} ▸"
+      less: "less ▴"
+      today: "today"
+      days:
+        one: "%{count} d"
+        other: "%{count} d"
+      in_chat: "in chat"
+      open_ticket: "Open the ticket workplace (o)"
+      open_count:
+        one: "%{count} open"
+        other: "%{count} open"
+      path_missing: "Path missing"
+      no_hits: "No hits for this search."
+      keys: "j / k row · ↵ into the chat · o open ticket · . next · c new chat · / search · 1–4 tabs"
+      hints:
+        question: "waits for your answer"
+        for_you: "planned, start needs your GO"
+        human: "ready-for-human"
+        in_progress: "agent at work"
+        review: "waits for review"
+        agent_ready: "start approved, agent may start"
+        done: "recently done"
+        triage: "new, not planned yet"
+      empty:
+        question: "No open question."
+        for_you: "Nothing waits for approval."
+        human: "Nothing for you to do."
+        in_progress: "No ticket in progress."
+        review: "Nothing in review."
+        agent_ready: "No ticket with start approval."
+        done: "Nothing done."
+        triage: "Triage is empty."
     widgets:
       collapse: Collapse
       expand: Expand

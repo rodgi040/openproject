@@ -35,19 +35,31 @@
       </button>
     <% end %>
     <div class="fp-home-main-body" data-fp-pane-body>
-      <%=
-        render(Primer::OpenProject::PageHeader.new) do |header|
-          header.with_title { t("flightplan.dashboard.title") }
-          header.with_breadcrumbs(nil)
-        end
-      %>
+      <% with_worklist = with_chat && @dashboard && @board_widget %>
+      <div class="fp-home-head">
+        <h1 class="fp-home-title"><%= t("flightplan.dashboard.title") %></h1>
+        <% if with_worklist %>
+          <%# OP#1778 Teil 2: zwei Ansichten der linken Fläche, Wahl im localStorage (fp-home-left), Standard Board. %>
+          <div class="fp-home-leftviews" role="group" aria-label="<%= t("flightplan.home.left_view") %>" data-fp-left-views>
+            <button type="button" data-fp-left-set="board" aria-pressed="true"><%= t("flightplan.home.left_board") %></button>
+            <button type="button" data-fp-left-set="worklist" aria-pressed="false"><%= t("flightplan.home.left_worklist") %></button>
+          </div>
+        <% end %>
+      </div>
       <% if with_chat %>
         <%= render "flightplan/home/chat_picker" %>
       <% else %>
         <p class="fp-dash-hint" data-fp-chat-admin-only><%= t("flightplan.home.chat_admin_only") %></p>
       <% end %>
       <% if @dashboard %>
-        <%= render "flightplan/dashboard/dashboard" %>
+        <div data-fp-left-view="board">
+          <%= render "flightplan/dashboard/dashboard" %>
+        </div>
+        <% if with_worklist %>
+          <div data-fp-left-view="worklist" hidden>
+            <%= render "flightplan/dashboard/worklist" %>
+          </div>
+        <% end %>
       <% else %>
         <div class="fp-dash-hint" data-fp-dashboard-admin-only>
           <p><%= t("flightplan.home.dashboard_admin_only") %></p>

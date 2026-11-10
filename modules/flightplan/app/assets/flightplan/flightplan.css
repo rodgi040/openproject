@@ -1853,3 +1853,321 @@ a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addon
 .fp-home-main .fp-chat-offline {
   margin: 0.75rem;
 }
+
+/* OP#1778 Teil 2: Kopf der linken Fläche mit Umschalter Board | Arbeitsliste. */
+.fp-home-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.25rem 0 0.6rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--borderColor-default, #d0d7de);
+}
+
+.fp-home-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.fp-home-leftviews {
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+}
+
+.fp-home-leftviews button {
+  padding: 0.15rem 0.7rem;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  background: var(--bgColor-default, #fff);
+  color: var(--fgColor-default, #1f2328);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fp-home-leftviews button + button {
+  border-left: 0;
+}
+
+.fp-home-leftviews button:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.fp-home-leftviews button:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.fp-home-leftviews button[aria-pressed="true"] {
+  background: var(--bgColor-accent-muted, #ddf4ff);
+  border-color: var(--borderColor-accent-emphasis, #0969da);
+  color: var(--fgColor-accent, #0969da);
+}
+
+.fp-chat-next {
+  flex: 0 0 auto;
+  padding: 0.05rem 0.55rem;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: 6px;
+  background: var(--bgColor-default, #fff);
+  color: var(--fgColor-default, #1f2328);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fp-chat-next:hover,
+.fp-chat-next:focus-visible {
+  background: var(--bgColor-muted, #f6f8fa);
+}
+
+/* Arbeitsliste: Reiter, eine Filterzeile, Gruppen mit Zeilen. Kein waagerechtes Scrollen. */
+.fp-worklist {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 0.875rem;
+}
+
+.fp-wl-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--borderColor-default, #d0d7de);
+}
+
+.fp-wl-tabs button {
+  padding: 0.35rem 0.8rem;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--fgColor-muted, #59636e);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fp-wl-tabs button[aria-selected="true"] {
+  color: var(--fgColor-default, #1f2328);
+  border-bottom-color: var(--bgColor-accent-emphasis, #0969da);
+}
+
+.fp-wl-count {
+  display: inline-block;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--bgColor-neutral-muted, #afb8c133);
+  color: var(--fgColor-muted, #59636e);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.fp-wl-tabs button[aria-selected="true"] .fp-wl-count {
+  background: var(--bgColor-accent-emphasis, #0969da);
+  color: var(--fgColor-onEmphasis, #fff);
+}
+
+.fp-wl-filter {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+}
+
+.fp-wl-filter input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.fp-wl-filter select {
+  flex: 0 1 12rem;
+  min-width: 0;
+}
+
+.fp-wl-group {
+  margin-bottom: 0.25rem;
+}
+
+.fp-wl-group-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  padding: 0.4rem 0.5rem;
+  background: var(--bgColor-muted, #f6f8fa);
+  border-top: 1px solid var(--borderColor-default, #d0d7de);
+}
+
+.fp-wl-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fgColor-muted, #59636e);
+  font-size: 0.8rem;
+}
+
+.fp-wl-all {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fgColor-accent, #0969da);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.fp-wl-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.fp-wl-row {
+  padding: 0.35rem 0.5rem 0.35rem 0.6rem;
+  border-bottom: 1px solid var(--borderColor-muted, #d8dee4);
+  border-left: 3px solid transparent;
+  cursor: pointer;
+}
+
+.fp-wl-row:hover,
+.fp-wl-row:focus-visible {
+  background: var(--bgColor-muted, #f6f8fa);
+  outline: none;
+}
+
+.fp-wl-row:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--fgColor-accent, #0969da);
+}
+
+.fp-wl-row[aria-current="true"] {
+  background: var(--bgColor-accent-muted, #ddf4ff);
+  border-left-color: var(--bgColor-accent-emphasis, #0969da);
+}
+
+.fp-wl-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.fp-wl-id {
+  flex: 0 0 auto;
+  font-weight: 700;
+}
+
+.fp-wl-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.fp-wl-age,
+.fp-wl-meta-inline {
+  flex: 0 0 auto;
+  color: var(--fgColor-muted, #59636e);
+  font-size: 0.8rem;
+}
+
+.fp-wl-flag {
+  display: none;
+  flex: 0 0 auto;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--bgColor-accent-emphasis, #0969da);
+  color: var(--fgColor-onEmphasis, #fff);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.fp-wl-row[aria-current="true"] .fp-wl-flag {
+  display: inline;
+}
+
+.fp-wl-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.45rem;
+  padding-left: 0.1rem;
+  color: var(--fgColor-muted, #59636e);
+  font-size: 0.8rem;
+}
+
+.fp-wl-label,
+.fp-wl-type,
+.fp-wl-prio,
+.fp-wl-warn {
+  padding: 0 0.4rem;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: 999px;
+  font-size: 0.72rem;
+}
+
+.fp-wl-prio {
+  border-color: var(--borderColor-severe-muted, #fb8f4466);
+  color: var(--fgColor-severe, #bc4c00);
+}
+
+.fp-wl-warn {
+  background: var(--bgColor-attention-muted, #fff8c5);
+  border-color: var(--borderColor-attention-muted, #d4a72c66);
+  color: var(--fgColor-attention, #9a6700);
+}
+
+.fp-wl-empty {
+  margin: 0.35rem 0.6rem;
+  color: var(--fgColor-muted, #59636e);
+}
+
+.fp-wl-empty[hidden],
+.fp-wl-row[hidden] {
+  display: none;
+}
+
+.fp-wl-projects {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.fp-wl-project {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 0;
+  border-bottom: 1px solid var(--borderColor-muted, #d8dee4);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fp-wl-project:hover,
+.fp-wl-project:focus-visible {
+  background: var(--bgColor-muted, #f6f8fa);
+}
+
+.fp-wl-keys {
+  margin: 0.5rem 0 0;
+  color: var(--fgColor-muted, #59636e);
+  font-size: 0.75rem;
+}
+
+@container (max-width: 30rem) {
+  .fp-wl-keys,
+  .fp-wl-hint {
+    display: none;
+  }
+}

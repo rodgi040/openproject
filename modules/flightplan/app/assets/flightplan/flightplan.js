@@ -549,6 +549,22 @@ function fpMountChat(root, frame) {
       sendState();
       return;
     }
+    if (data.type === "fp:thread" && bar) {
+      // OP#1778 Teil 2: T3 meldet den offenen Thread (Wechsel in der Thread-Leiste); links zieht die Markierung nach.
+      var shown = Number(data.ticketId) > 0 ? Number(data.ticketId) : 0;
+      shownTicket = shown;
+      if (shown) {
+        if (!wp || Number(wp.id) !== shown) {
+          var known = document.querySelector("[data-fp-chat-ticket='" + shown + "'], [data-fp-worklist-row][data-id='" + shown + "']");
+          wp = { id: shown, subject: known ? known.dataset.subject : "" };
+        }
+        markActive(shown);
+      } else {
+        wp = {};
+        markActive(null, !!data.threadId);
+      }
+      return;
+    }
     if (data.type === "fp:comment") {
       // OP#1711 Welle 2: Nachricht aus dem Thread wird Kommentar im Namen des angemeldeten Menschen (Session, CSRF).
       var wpId = Number(data.wpId);
@@ -610,8 +626,13 @@ function fpMountChat(root, frame) {
     wp = { id: detail.id, subject: detail.subject, project: detail.project, status: detail.status,
            labels: detail.labels || [], url: detail.url };
     // OP#1711: Auf der Startseite (Ticketleiste) öffnet die Karte den Thread des Tickets, der Kontext folgt beim Laden.
-    if (bar) openTicket(detail.id, detail.subject, true);
-    else post({ type: "fp:context", wp: wp });
+    // OP#1778: Zeilen der Arbeitsliste (reveal) holen den Chat dazu in den Blick.
+    if (bar) {
+      openTicket(detail.id, detail.subject, true);
+      if (detail.reveal) window.dispatchEvent(new CustomEvent("fp:home-show-chat"));
+    } else {
+      post({ type: "fp:context", wp: wp });
+    }
   });
 
   // OP#1711/OP#1778: Ticketauswahl der Startseite (links im Dashboard, nicht mehr über dem iframe). Ein Klick lädt
@@ -630,7 +651,7 @@ function fpMountChat(root, frame) {
     }
   }
 
-  function markActive(id) {
+  function markActive(id, free) {
     var found = false;
     bar.querySelectorAll("[data-fp-chat-ticket], [data-fp-chat-new]").forEach(function (node) {
       var active = !found && (id ? node.dataset.fpChatTicket === String(id) : node.hasAttribute("data-fp-chat-new"));
@@ -644,9 +665,11 @@ function fpMountChat(root, frame) {
     var label = bar.querySelector("[data-fp-chat-active]");
     if (label) {
       var current = id ? bar.querySelector("[data-fp-chat-ticket='" + String(Number(id)) + "']") : null;
-      var text = id ? "#" + Number(id) + (current && current.dataset.subject ? " " + current.dataset.subject : (wp && wp.subject ? " " + wp.subject : "")) : label.dataset.new;
+      var text = id ? "#" + Number(id) + (current && current.dataset.subject ? " " + current.dataset.subject : (wp && wp.subject ? " " + wp.subject : "")) : (free ? label.dataset.free : label.dataset.new);
       label.textContent = label.dataset.prefix + ": " + text;
     }
+    // OP#1778: die Arbeitsliste markiert dieselbe Zeile (eine Stelle für den aktiven Stand).
+    window.dispatchEvent(new CustomEvent("fp:chat-active", { detail: { id: id ? Number(id) : null } }));
   }
 
   function renderRecent() {
@@ -706,11 +729,16 @@ function fpMountChat(root, frame) {
   }
   if (frame && loading) frame.addEventListener("load", function () { loading.hidden = true; });
 
+  // OP#1778: Ticket, das T3 zuletzt per fp:thread gemeldet hat (0 = ohne Ticket, null = keine Meldung). Nach einem
+  // Wechsel in der T3-Thread-Leiste ist das src-Attribut veraltet; dann lädt dieselbe Adresse neu.
+  var shownTicket = null;
   function loadFrame(url) {
     frame.dataset.src = url;
     // Chat nicht erreichbar (kein src): "Neu laden" lädt danach den gewählten Thread.
     if (!frame.getAttribute("src")) return;
-    if (frame.getAttribute("src") === url) {
+    var wanted = /\/embed\/(\d+)/.exec(url);
+    var stale = shownTicket !== null && shownTicket !== (wanted ? Number(wanted[1]) : 0);
+    if (frame.getAttribute("src") === url && !stale) {
       sendState();
       return;
     }
@@ -747,6 +775,24 @@ function fpMountChat(root, frame) {
         more.setAttribute("aria-expanded", open ? "true" : "false");
         more.textContent = open ? more.dataset.less : more.dataset.label;
       }
+    });
+    // OP#1778 Teil 2: „Nächstes ▸“ (Taste .) nimmt das nächste Ticket der sichtbaren Liste: Arbeitsliste, sonst die
+    // Ticketauswahl. Die Reihenfolge ist die angezeigte.
+    function nextTicket() {
+      var rows = Array.prototype.slice.call(document.querySelectorAll("[data-fp-left-view='worklist']:not([hidden]) [data-fp-wl-panel]:not([hidden]) [data-fp-worklist-row]:not([hidden])"));
+      if (!rows.length) rows = Array.prototype.slice.call(bar.querySelectorAll("[data-fp-chat-ticket-list] [data-fp-chat-ticket]"));
+      if (!rows.length) return;
+      var ids = rows.map(function (node) { return Number(node.dataset.id || node.dataset.fpChatTicket); });
+      var at = ids.indexOf(Number(wp && wp.id));
+      var pick = rows[(at + 1) % rows.length];
+      openTicket(ids[(at + 1) % rows.length], pick.dataset.subject);
+    }
+    var next = bar.querySelector("[data-fp-chat-next]");
+    if (next) next.addEventListener("click", nextTicket);
+    window.addEventListener("fp:chat-next", nextTicket);
+    window.addEventListener("fp:chat-new", function () {
+      var fresh = bar.querySelector("[data-fp-chat-new]");
+      if (fresh) fresh.click();
     });
     var moreButton = bar.querySelector("[data-fp-chat-more-toggle]");
     if (moreButton) moreButton.dataset.label = moreButton.textContent.trim();
@@ -982,6 +1028,161 @@ function fpHomeSplit(home) {
   apply();
 }
 
+// OP#1778 Teil 2: Arbeitsliste (zweite Ansicht der linken Fläche) und Umschalter Board | Arbeitsliste. Zeilen sind
+// Karten des Boards; ein Klick oder ↵ nimmt das Ticket in den Chat (fp:card-selected), die Nummer oder o öffnet den
+// Arbeitsplatz. Filter und Suche wirken auf die geladenen Zeilen (wie das Board, 200 je Spalte).
+function fpWorklist(main) {
+  var views = main.querySelector("[data-fp-left-views]");
+  var list = main.querySelector("[data-fp-worklist]");
+  if (!views || !list) return;
+  var KEY = "fp-home-left";
+  var tabs = Array.prototype.slice.call(list.querySelectorAll("[data-fp-wl-tab]"));
+  var search = list.querySelector("[data-fp-wl-search]");
+  var project = list.querySelector("[data-fp-wl-project]");
+  var nohit = list.querySelector("[data-fp-wl-nohit]");
+
+  function stored() {
+    try { return window.localStorage.getItem(KEY); } catch (error) { return null; }
+  }
+  function setLeft(view, persist) {
+    var on = view === "worklist" ? "worklist" : "board";
+    main.querySelectorAll("[data-fp-left-view]").forEach(function (node) { node.hidden = node.dataset.fpLeftView !== on; });
+    views.querySelectorAll("[data-fp-left-set]").forEach(function (button) {
+      button.setAttribute("aria-pressed", button.dataset.fpLeftSet === on ? "true" : "false");
+    });
+    main.dataset.fpLeft = on;
+    if (persist) {
+      try { window.localStorage.setItem(KEY, on); } catch (error) { /* ohne Speicher gilt Board */ }
+    }
+  }
+  views.addEventListener("click", function (event) {
+    var button = event.target.closest("[data-fp-left-set]");
+    if (button) setLeft(button.dataset.fpLeftSet, true);
+  });
+
+  function panel() {
+    return list.querySelector("[data-fp-wl-panel]:not([hidden])");
+  }
+  function setTab(name) {
+    tabs.forEach(function (tab) {
+      var on = tab.dataset.fpWlTab === name;
+      tab.setAttribute("aria-selected", on ? "true" : "false");
+      tab.tabIndex = on ? 0 : -1;
+    });
+    list.querySelectorAll("[data-fp-wl-panel]").forEach(function (node) { node.hidden = node.dataset.fpWlPanel !== name; });
+    applyFilter();
+  }
+  tabs.forEach(function (tab) {
+    tab.addEventListener("click", function () { setTab(tab.dataset.fpWlTab); });
+  });
+
+  function filtering() {
+    return !!((search && search.value.trim()) || (project && project.value));
+  }
+  function applyFilter() {
+    var text = search ? search.value.trim().toLowerCase() : "";
+    var scope = project ? project.value : "";
+    var hits = 0;
+    list.querySelectorAll("[data-fp-wl-group]").forEach(function (group) {
+      var expanded = group.querySelector("[data-fp-wl-all][aria-expanded='true']");
+      group.querySelectorAll("[data-fp-worklist-row]").forEach(function (row) {
+        var match = (!text || row.dataset.search.indexOf(text) !== -1) && (!scope || row.dataset.project === scope);
+        var limited = row.hasAttribute("data-fp-wl-more") && !expanded && !filtering();
+        row.hidden = !match || limited;
+        if (match && group.closest("[data-fp-wl-panel]") === panel()) hits += 1;
+      });
+    });
+    if (nohit) nohit.hidden = !filtering() || hits > 0 || !panel() || panel().dataset.fpWlPanel === "projekte";
+  }
+  if (search) search.addEventListener("input", applyFilter);
+  if (project) project.addEventListener("change", applyFilter);
+
+  list.addEventListener("click", function (event) {
+    var all = event.target.closest("[data-fp-wl-all]");
+    if (all) {
+      var open = all.getAttribute("aria-expanded") !== "true";
+      all.setAttribute("aria-expanded", open ? "true" : "false");
+      all.textContent = open ? all.dataset.less : all.dataset.more;
+      applyFilter();
+      return;
+    }
+    var pick = event.target.closest("[data-fp-wl-pick-project]");
+    if (pick) {
+      if (project) project.value = pick.dataset.fpWlPickProject;
+      setTab("fuer_dich");
+      return;
+    }
+    var row = event.target.closest("[data-fp-worklist-row]");
+    if (!row || event.target.closest("a, button")) return;
+    openRow(row);
+  });
+
+  function openRow(row) {
+    row.focus();
+    window.dispatchEvent(new CustomEvent("fp:card-selected", {
+      detail: {
+        id: Number(row.dataset.id),
+        subject: row.dataset.subject,
+        project: row.dataset.project,
+        status: row.dataset.status,
+        labels: fpParseList(row.dataset.labels),
+        url: row.dataset.url,
+        reveal: true
+      }
+    }));
+  }
+
+  function rows() {
+    var current = panel();
+    return current ? Array.prototype.slice.call(current.querySelectorAll("[data-fp-worklist-row]:not([hidden])")) : [];
+  }
+  function move(step) {
+    var all = rows();
+    if (!all.length) return;
+    var at = all.indexOf(document.activeElement);
+    var next = all[Math.min(all.length - 1, Math.max(0, at === -1 ? 0 : at + step))];
+    next.focus();
+    next.scrollIntoView({ block: "nearest" });
+  }
+
+  document.addEventListener("keydown", function (event) {
+    if (list.closest("[hidden]") || event.altKey || event.ctrlKey || event.metaKey) return;
+    var target = event.target;
+    var typing = target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+    if (typing) {
+      if (event.key === "Escape" && target === search) {
+        search.value = "";
+        applyFilter();
+        search.blur();
+      }
+      return;
+    }
+    var row = target && target.closest ? target.closest("[data-fp-worklist-row]") : null;
+    var key = event.key;
+    if (key === "j" || key === "ArrowDown") move(1);
+    else if (key === "k" || key === "ArrowUp") move(-1);
+    else if (key === "Enter" && row) openRow(row);
+    else if (key === "o" && row) window.location.href = row.querySelector(".fp-wl-id").href;
+    else if (key === ".") window.dispatchEvent(new CustomEvent("fp:chat-next"));
+    else if (key === "c") window.dispatchEvent(new CustomEvent("fp:chat-new"));
+    else if (key === "/" && search) search.focus();
+    else if (/^[1-4]$/.test(key) && tabs[Number(key) - 1]) setTab(tabs[Number(key) - 1].dataset.fpWlTab);
+    else return;
+    event.preventDefault();
+  });
+
+  window.addEventListener("fp:chat-active", function (event) {
+    var id = event.detail && event.detail.id;
+    list.querySelectorAll("[data-fp-worklist-row]").forEach(function (row) {
+      if (id && Number(row.dataset.id) === Number(id)) row.setAttribute("aria-current", "true");
+      else row.removeAttribute("aria-current");
+    });
+  });
+
+  setLeft(stored() === "worklist" ? "worklist" : "board", false);
+  applyFilter();
+}
+
 (function () {
   var workplace = document.getElementById("fp-workplace");
   if (workplace) fpMountChat(workplace, workplace.querySelector("[data-fp-workplace-frame]"));
@@ -989,6 +1190,8 @@ function fpHomeSplit(home) {
   if (home) fpMountChat(home, home.querySelector("[data-fp-home-frame]"));
   var split = document.querySelector("#fp-home[data-fp-chat='1']");
   if (split) fpHomeSplit(split);
+  var main = document.querySelector("#fp-home[data-fp-chat='1'] > .fp-home-main");
+  if (main) fpWorklist(main);
 })();
 
 (function () {
