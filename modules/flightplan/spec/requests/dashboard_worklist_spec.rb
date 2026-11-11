@@ -107,7 +107,7 @@ RSpec.describe "Flightplan work list", :skip_csrf, type: :rails_request do
       it "is the first element of the work list, above the tabs" do
         children = page.at_css("#fp-worklist").element_children
         expect(children.first["id"]).to eq("fp-inbox")
-        expect(children.second["class"]).to include("fp-wl-tabs")
+        expect(children[1]["class"]).to include("fp-wl-tabs")
       end
 
       it "lists exactly the open questions, oldest first, with question, options and answer buttons in the row" do
