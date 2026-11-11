@@ -139,4 +139,33 @@ RSpec.describe "API v3 flightplan assumptions", type: :request, content_type: :j
     expect(last_response.status).to eq(404)
     expect(Flightplan::Assumption.find(id)).to be_open
   end
+
+  it "answers 403 when the user is human only in another project (REST)" do
+    mixed = create(:user, member_with_roles: { project => human_role, other_project => role })
+    foreign = create(:work_package, project: other_project, author: agent)
+    assumption = Flightplan::Assumption.create!(work_package: foreign, author: agent, text: "Fremd")
+
+    login_as(mixed)
+    post "/api/v3/flightplan/assumptions/#{assumption.id}/decide", { decision: "confirmed" }.to_json
+
+    expect(last_response).to have_http_status(:forbidden)
+    expect(assumption.reload).to be_open
+  end
+
+  it "backs the one-open-assumption limit with a partial unique index" do
+    Flightplan::Assumption.create!(work_package:, author: agent, text: "Eins")
+
+    expect { Flightplan::Assumption.create!(work_package:, author: agent, text: "Zwei") }
+      .to raise_error(ActiveRecord::RecordNotUnique)
+    expect { Flightplan::Assumption.create!(work_package:, author: agent, text: "Alt", status: "rejected") }
+      .not_to raise_error
+    expect { Flightplan::Assumptions::Create.call(user: agent, work_package:, text: "Drei") }
+      .to raise_error(Flightplan::Error, /offene Annahme/)
+  end
+
+  it "removes the assumptions together with the ticket (foreign key cascade)" do
+    Flightplan::Assumption.create!(work_package:, author: agent, text: "Weg damit")
+
+    expect { WorkPackage.where(id: work_package.id).delete_all }.to change(Flightplan::Assumption, :count).by(-1)
+  end
 end

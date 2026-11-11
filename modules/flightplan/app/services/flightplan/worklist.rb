@@ -30,7 +30,7 @@ module Flightplan
     end
 
     def self.inbox_count(rows, results = [])
-      inbox_questions(rows).size + Array(results).size
+      inbox_questions(rows).size + (results.respond_to?(:total) ? results.total : Array(results).size)
     end
   end
 end

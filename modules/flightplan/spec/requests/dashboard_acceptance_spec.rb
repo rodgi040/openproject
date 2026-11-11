@@ -89,8 +89,34 @@ RSpec.describe "Flightplan Abnahmekarte", :skip_csrf, type: :rails_request do
       get "/"
       expect(rows.map { |row| row["data-kind"] }).to eq(%w[question result result])
       expect(rows.map { |row| row["data-rank"].to_i }).to eq([1, 2, 2])
+      expect(rows.map { |row| row["data-id"].to_i }.drop(1)).to eq([working_ticket.id, review_ticket.id])
       expect(Flightplan::Worklist::INBOX_KINDS.index("result")).to eq(2)
       expect(page.at_css("[data-fp-inbox-count]").text.squish).to eq("Braucht dich (3)")
+    end
+
+    it "leaves out Review tickets without closing statement and does not count them" do
+      bare = create(:work_package, project:, type: task_type, status: ensure_status("Review"), subject: "Altlast ohne Aussage")
+      note(bare, "Fertig, glaub mir.")
+      get "/"
+      expect(rows.map { |row| row["data-id"].to_i }).to contain_exactly(review_ticket.id, working_ticket.id)
+      expect(page.at_css("[data-fp-inbox-count]").text.squish).to eq("Braucht dich (2)")
+    end
+
+    it "shows who wrote the closing statement and the PR comment, escaped" do
+      get "/"
+      row = rows.find { |item| item["data-id"].to_i == review_ticket.id }
+      expect(row.at_css("[data-fp-result-origin]").text).to include("Abschlussaussage von #{admin.name}")
+      expect(row.at_css("[data-fp-pr-origin]").text).to include("von #{admin.name}")
+    end
+
+    it "lists assumptions first, notes the cards beyond the limit and keeps the count right" do
+      stub_const("Flightplan::Acceptance::LIMIT", 1)
+      get "/"
+      expect(rows.map { |row| row["data-id"].to_i }).to eq([working_ticket.id])
+      expect(inbox["data-fp-more"]).to eq("1")
+      expect(inbox.at_css("[data-fp-inbox-more]").text).to include("+1 weitere")
+      expect(inbox.at_css("[data-fp-inbox-total]").text).to eq("2")
+      expect(page.at_css("[data-fp-inbox-count]").text.squish).to eq("Braucht dich (2)")
     end
 
     it "does not show guard or diff size, which the module does not know" do
@@ -193,6 +219,24 @@ RSpec.describe "Flightplan Abnahmekarte", :skip_csrf, type: :rails_request do
       end
     end
 
+    context "as a human of another project" do
+      let(:mixed) do
+        human = create(:project_role, name: "Mensch", permissions: %i[view_work_packages])
+        viewer = create(:project_role, name: "Betrachter", permissions: %i[view_work_packages])
+        other = create(:project)
+        create(:user, language: "de", member_with_roles: { other => human, project => viewer })
+      end
+
+      current_user { mixed }
+
+      it "answers 403: the Mensch role does not reach the project of the ticket" do
+        post "/flightplan/assumptions/#{assumption.id}/decide", params: { decision: "confirmed" }, headers: json
+
+        expect(response).to have_http_status(:forbidden)
+        expect(assumption.reload).to be_open
+      end
+    end
+
     context "as a user who cannot see the ticket" do
       current_user { create(:user, language: "de") }
 
@@ -203,5 +247,32 @@ RSpec.describe "Flightplan Abnahmekarte", :skip_csrf, type: :rails_request do
         expect(assumption.reload).to be_open
       end
     end
+  end
+end
+
+RSpec.describe "Flightplan Abnahmekarte with CSRF protection", type: :rails_request do
+  let(:admin) { create(:admin, language: "de") }
+  let(:project) { create(:project, public: false) }
+  let(:work_package) { create(:work_package, project:, author: admin) }
+  let!(:assumption) { Flightplan::Assumption.create!(work_package:, author: admin, text: "Mit Token?") }
+
+  current_user { admin }
+
+  around do |example|
+    state = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    example.run
+  ensure
+    ActionController::Base.allow_forgery_protection = state
+  end
+
+  it "puts the CSRF token into the form and rejects a decision without it" do
+    get "/"
+    form = Nokogiri::HTML(response.body).at_css("form[data-fp-assumption-form]")
+    expect(form.at_css("input[name='authenticity_token']")["value"]).to be_present
+
+    post "/flightplan/assumptions/#{assumption.id}/decide", params: { decision: "confirmed" }
+
+    expect(assumption.reload).to be_open
   end
 end

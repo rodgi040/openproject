@@ -598,6 +598,22 @@
   grid-row: 1;
 }
 
+/* OP#1839: Platzanzeige und Zähler stehen neben dem Hinweis; in den schmalen Modi bricht der Hinweis in eine eigene Zeile um,
+   statt abgeschnitten zu werden (Staging F1). */
+.fp-home[data-fp-narrow="1"] .fp-home-viewbar-end {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: 0;
+}
+
+.fp-home[data-fp-narrow="1"] .fp-home-viewbar-hint {
+  flex: 1 1 100%;
+  overflow: visible;
+  text-align: right;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 /* OpenProject blendet sein Menü unter 1012 px selbst aus und zeigt dann oben links einen eigenen Knopf. */
 #main.hidden-navigation .fp-home-viewbar {
   padding-left: 3.5rem;
@@ -2429,4 +2445,14 @@ a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addon
   font-size: 0.78rem;
   color: var(--fgColor-muted, #59636e);
   white-space: nowrap;
+}
+
+.fp-result-origin {
+  margin: 0.2rem 0 0;
+  font-size: 0.75rem;
+  color: var(--fgColor-muted, #59636e);
+}
+
+.fp-inbox-more {
+  margin: 0.3rem 0.5rem;
 }

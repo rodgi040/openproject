@@ -4,7 +4,7 @@
 class CreateFlightplanAssumptions < ActiveRecord::Migration[8.0]
   def up
     create_table :flightplan_assumptions do |t|
-      t.references :work_package, null: false, foreign_key: true, index: true
+      t.references :work_package, null: false, foreign_key: { on_delete: :cascade }, index: true
       t.references :author, null: false, foreign_key: { to_table: :users }
       t.text :text, null: false
       t.string :status, null: false, default: "open"
@@ -15,6 +15,9 @@ class CreateFlightplanAssumptions < ActiveRecord::Migration[8.0]
     end
 
     add_index :flightplan_assumptions, %i[status created_at]
+    # Zweite Absicherung zur Grenze "höchstens eine offene Annahme je Ticket" (Assumptions::Create prüft zuerst).
+    add_index :flightplan_assumptions, :work_package_id, unique: true, where: "status = 'open'",
+                                                        name: "index_flightplan_assumptions_one_open_per_wp"
   end
 
   def down

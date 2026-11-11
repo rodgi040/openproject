@@ -53,45 +53,84 @@ RSpec.describe Flightplan::Acceptance do
       raise result.errors.full_messages.to_sentence unless result.success?
     end
 
-    it "shows tickets in Review and tickets with an open assumption, but no others, and only visible ones" do
-      in_review = create(:work_package, project:, author: agent, status: review)
+    let(:done_text) { "#{marker}\n## Geändert\nX\n## Geprüft\nY\n## Offen\nZ" }
+
+    it "shows tickets with an open assumption and Review tickets WITH a closing statement, but no others, and only visible ones" do
+      with_result = create(:work_package, project:, author: agent, status: review)
+      note(with_result, done_text)
+      without_result = create(:work_package, project:, author: agent, status: review)
+      note(without_result, "Fertig, glaub mir.")
       assumed = create(:work_package, project:, author: agent, status: working)
       _plain = create(:work_package, project:, author: agent, status: working)
       hidden = create(:work_package, project: other_project, author: agent, status: review)
       Flightplan::Assumption.create!(work_package: assumed, author: agent, text: "Port 8094")
       Flightplan::Assumption.create!(work_package: hidden, author: agent, text: "versteckt")
-      Flightplan::Assumption.create!(work_package: in_review, author: agent, text: "schon klar", status: "confirmed")
+      Flightplan::Assumption.create!(work_package: with_result, author: agent, text: "schon klar", status: "confirmed")
 
-      rows = described_class.load(user: viewer)
+      list = described_class.load(user: viewer)
 
-      expect(rows.map(&:id)).to contain_exactly(in_review.id, assumed.id)
-      expect(rows.find { |row| row.id == in_review.id }).to have_attributes(review: true, assumptions: [])
-      expect(rows.find { |row| row.id == assumed.id }.assumptions.map(&:text)).to eq(["Port 8094"])
+      expect(list.rows.map(&:id)).to eq([assumed.id, with_result.id])
+      expect(list.total).to eq(2)
+      expect(list.more).to eq(0)
+      expect(list.rows.last).to have_attributes(review: true, assumptions: [])
+      expect(list.rows.first.assumptions.map(&:text)).to eq(["Port 8094"])
+      expect(described_class.load(user: viewer).rows.map(&:id)).not_to include(without_result.id)
     end
 
-    it "takes the newest comment with the marker as result and the newest „PR:“ comment as pull request" do
+    it "puts assumptions first, then Review tickets, each oldest first" do
+      newer_review = create(:work_package, project:, author: agent, status: review)
+      older_review = create(:work_package, project:, author: agent, status: review)
+      note(older_review, done_text)
+      note(newer_review, done_text)
+      Journal.where(journable_id: older_review.id).where("notes LIKE ?", "#{marker}%").update_all(created_at: 3.days.ago)
+      late = create(:work_package, project:, author: agent, status: working)
+      early = create(:work_package, project:, author: agent, status: working)
+      Flightplan::Assumption.create!(work_package: late, author: agent, text: "spät", created_at: 1.hour.ago)
+      Flightplan::Assumption.create!(work_package: early, author: agent, text: "früh", created_at: 2.days.ago)
+
+      expect(described_class.load(user: viewer).rows.map(&:id)).to eq([early.id, late.id, older_review.id, newer_review.id])
+    end
+
+    it "limits the rows, keeps the full total and reports how many are left out" do
+      stub_const("Flightplan::Acceptance::LIMIT", 2)
+      3.times do |index|
+        work_package = create(:work_package, project:, author: agent, status: working)
+        Flightplan::Assumption.create!(work_package:, author: agent, text: "A#{index}", created_at: (index + 1).days.ago)
+      end
+
+      list = described_class.load(user: viewer)
+
+      expect(list.rows.size).to eq(2)
+      expect(list.total).to eq(3)
+      expect(list.more).to eq(1)
+      expect(Flightplan::Worklist.inbox_count([], list)).to eq(3)
+    end
+
+    it "takes the newest comment with the marker as result and the newest „PR:“ comment as pull request, with author and time" do
       work_package = create(:work_package, project:, author: agent, status: review)
       note(work_package, "#{marker}\n## Geändert\nalt\n## Geprüft\nalt\n## Offen\nalt")
       note(work_package, "PR: https://github.com/o/r/pull/1")
       note(work_package, "#{marker}\n## Geändert\nneu\n## Geprüft\nSpecs\n## Offen\n-")
       note(work_package, "## Geändert\nohne Marker, zählt nicht")
+      note(work_package, "Hinweis PR: https://github.com/o/r/pull/3 mitten im Text")
       note(work_package, "PR: https://github.com/o/r/pull/2")
 
-      row = described_class.load(user: viewer).find { |item| item.id == work_package.id }
+      row = described_class.load(user: viewer).rows.find { |item| item.id == work_package.id }
 
       expect(row.result.changed).to eq("neu")
       expect(row.result.checked).to eq("Specs")
+      expect(row.result.by).to eq(agent.name)
+      expect(row.result.at).to be_present
       expect(row.pull_request).to eq("https://github.com/o/r/pull/2")
+      expect(row.pull_request_by).to eq(agent.name)
+      expect(row.pull_request_at).to be_present
     end
 
-    it "has no result when no comment carries the marker" do
+    it "ignores a marker that is not on the first line and a newest comment without the marker" do
       work_package = create(:work_package, project:, author: agent, status: review)
-      note(work_package, "Fertig, glaub mir.")
+      note(work_package, "Vorwort\n#{marker}\n## Geändert\nX")
 
-      row = described_class.load(user: viewer).find { |item| item.id == work_package.id }
-
-      expect(row.result).to be_nil
-      expect(row.pull_request).to be_nil
+      expect(described_class.load(user: viewer).rows).to be_empty
     end
   end
 end

@@ -7,7 +7,7 @@
       fp_inbox_row: "", kind: "result", rank: Flightplan::Worklist::INBOX_KINDS.index("result"),
       since: row.since.to_i, id: row.id, subject: row.subject, project: row.work_package.project.identifier,
       status: row.status, labels: "[]", url: work_package_path(row.id), fp_result: row.id,
-      fp_review: (row.review ? "1" : "0"), fp_decided_confirmed: t("flightplan.acceptance.decided_short.confirmed"),
+      group: (row.assumptions.any? ? 0 : 1), fp_review: (row.review ? "1" : "0"), fp_decided_confirmed: t("flightplan.acceptance.decided_short.confirmed"),
       fp_decided_rejected: t("flightplan.acceptance.decided_short.rejected"),
       fp_sending_text: t("flightplan.questions.widget.sending"), fp_failed_text: t("flightplan.acceptance.failed"),
       fp_note_required: t("flightplan.acceptance.note_required")
@@ -22,13 +22,15 @@
     <span><%= row.project %></span>
     <span><%= row.status %></span>
     <% if pr %>
-      <span><%= t("flightplan.questions.pull_request") %>: <%= link_to pr, pr, target: "_blank", rel: "noopener noreferrer", class: "fp-result-pr" %></span>
+      <span><%= t("flightplan.questions.pull_request") %>: <%= link_to pr, pr, target: "_blank", rel: "noopener noreferrer", class: "fp-result-pr" %>
+        <span class="fp-result-origin" data-fp-pr-origin>(<%= t("flightplan.acceptance.origin", by: row.pull_request_by.presence || "–", at: l(row.pull_request_at, format: :short)) %>)</span></span>
     <% else %>
       <span class="fp-result-nopr"><%= t("flightplan.acceptance.no_pr") %></span>
     <% end %>
   </div>
   <% if row.result %>
     <div class="fp-result" data-fp-result-text>
+      <p class="fp-result-origin" data-fp-result-origin><%= t("flightplan.acceptance.result_by", by: row.result.by.presence || "–", at: l(row.result.at, format: :short)) %></p>
       <% { changed: "changed", checked: "checked", open_points: "open" }.each do |key, label| %>
         <% value = row.result.public_send(key) %>
         <p class="fp-result-title"><%= t("flightplan.acceptance.sections.#{label}") %></p>

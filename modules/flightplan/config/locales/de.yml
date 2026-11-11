@@ -33,6 +33,9 @@ de:
         sending: Wird gesendet …
         failed: Antwort fehlgeschlagen.
     acceptance:
+      more: "+%{count} weitere Karten (Limit der Liste)"
+      origin: "von %{by}, %{at}"
+      result_by: "Abschlussaussage von %{by}, %{at}"
       assumption: "Annahme"
       confirm: "bestätigen"
       reject: "verwerfen"
@@ -52,6 +55,9 @@ de:
       decided_short:
         confirmed: "Annahme bestätigt."
         rejected: "Annahme verworfen."
+    forward:
+      pending: "Der Agent hat die Antwort noch nicht erhalten"
+      no_thread: "Kein Chat zu diesem Ticket"
     start:
       button: "Im Hintergrund starten"
       title: "Agent im Hintergrund starten (s)"

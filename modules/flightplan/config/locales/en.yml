@@ -33,6 +33,9 @@ en:
         sending: Sending …
         failed: Answer failed.
     acceptance:
+      more: "+%{count} more cards (list limit)"
+      origin: "by %{by}, %{at}"
+      result_by: "Closing statement by %{by}, %{at}"
       assumption: "Assumption"
       confirm: "confirm"
       reject: "reject"
@@ -52,6 +55,9 @@ en:
       decided_short:
         confirmed: "Assumption confirmed."
         rejected: "Assumption rejected."
+    forward:
+      pending: "The agent has not received the answer yet"
+      no_thread: "No chat for this ticket"
     start:
       button: "Start in background"
       title: "Start the agent in the background (s)"

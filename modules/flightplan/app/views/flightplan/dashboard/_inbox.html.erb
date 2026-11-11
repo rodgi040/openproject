@@ -3,14 +3,16 @@
     ebenfalls vom Server. Befehlsfreigabe, Lauf fehlgeschlagen und Eingabe nötig kennt nur T3; sie kommen per fp:activity und flightplan.js (fpInbox) fügt die Zeilen ein und sortiert nach
     Rang und Alter. Keine Begrenzung auf Worklist::SHOWN. Titel und Fragen sind untrusted: nur escaped. %>
 <% entries = Flightplan::Worklist.inbox_questions(@questions_widget&.rows) %>
-<% results = Array(@acceptance) %>
-<section class="fp-inbox" id="fp-inbox" data-fp-inbox data-server-count="<%= entries.size + results.size %>" aria-label="<%= t("flightplan.worklist.inbox.title") %>">
+<% results = @acceptance&.rows || [] %>
+<% result_more = @acceptance ? @acceptance.more : 0 %>
+<% total = entries.size + (@acceptance ? @acceptance.total : 0) %>
+<section class="fp-inbox" id="fp-inbox" data-fp-inbox data-server-count="<%= total %>" data-fp-more="<%= result_more %>" aria-label="<%= t("flightplan.worklist.inbox.title") %>">
   <header class="fp-inbox-head">
     <strong><%= t("flightplan.worklist.inbox.title") %></strong>
-    <span class="fp-wl-count" data-fp-inbox-total><%= entries.size + results.size %></span>
+    <span class="fp-wl-count" data-fp-inbox-total><%= total %></span>
     <span class="fp-wl-hint"><%= t("flightplan.worklist.inbox.hint") %></span>
   </header>
-  <p class="fp-wl-empty" data-fp-inbox-empty<%= " hidden".html_safe if entries.any? || results.any? %>><%= t("flightplan.worklist.inbox.empty") %></p>
+  <p class="fp-wl-empty" data-fp-inbox-empty<%= " hidden".html_safe if total.positive? %>><%= t("flightplan.worklist.inbox.empty") %></p>
   <ol class="fp-wl-rows fp-inbox-rows" data-fp-inbox-rows>
     <% entries.each do |row| %>
       <%= tag.li class: "fp-wl-row fp-inbox-row", tabindex: -1, data: {
@@ -37,4 +39,7 @@
       <%= render "flightplan/dashboard/acceptance", row: result %>
     <% end %>
   </ol>
+  <% if result_more.positive? %>
+    <p class="fp-wl-hint fp-inbox-more" data-fp-inbox-more><%= t("flightplan.acceptance.more", count: result_more) %></p>
+  <% end %>
 </section>

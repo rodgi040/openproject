@@ -433,6 +433,106 @@ function fpTicketNumber(value) {
   return Number.isInteger(id) && id > 0 ? id : 0;
 }
 
+// OP#1840: Ablauf eines Hintergrundstarts, getrennt von DOM und Netz (env). Pro Ticket höchstens ein offener Start: solange
+// ein Eintrag besteht, löst kein zweiter Auslöser ein zweites fp:start aus. Der Eintrag endet bei fp:started, bei
+// fehlendem Kontext oder nach 15 s ohne Antwort; dabei wird der Timer beendet, ein späterer Ablauf ändert nichts mehr.
+function fpStartTracker(env) {
+  var pending = {};
+  function end(ticket, entry, key, error) {
+    if (pending[ticket] !== entry) return;
+    env.clear(entry.timer);
+    delete pending[ticket];
+    env.note(entry, env.text(key), error);
+    env.busy(entry, false);
+  }
+  function arm(ticket, entry) {
+    env.clear(entry.timer);
+    entry.timer = env.later(function () { end(ticket, entry, "error", true); }, 15000);
+  }
+  return {
+    isPending: function (ticket) { return !!pending[ticket]; },
+    request: function (detail) {
+      var ticket = fpTicketNumber(detail && detail.id);
+      if (!ticket || pending[ticket]) return false;
+      var entry = { node: detail.node, timer: 0 };
+      pending[ticket] = entry;
+      env.busy(entry, true);
+      env.note(entry, env.text("sending"), false);
+      arm(ticket, entry);
+      env.context(ticket).then(function (wp) {
+        if (pending[ticket] !== entry) return;
+        if (!wp || Number(wp.id) !== ticket) {
+          end(ticket, entry, "no_context", true);
+          return;
+        }
+        arm(ticket, entry);
+        env.post({ type: "fp:start", ticket: ticket, context: wp });
+      }).catch(function () { end(ticket, entry, "error", true); });
+      return true;
+    },
+    started: function (data) {
+      var ticket = fpTicketNumber(data && data.ticket);
+      var entry = ticket ? pending[ticket] : null;
+      if (!entry) return false;
+      var reason = data.reason === "slots" || data.reason === "running" || data.reason === "error" ? data.reason : null;
+      if (data.result === "accepted") end(ticket, entry, "accepted", false);
+      else if (reason === "slots") end(ticket, entry, "slots_full", true);
+      else if (reason === "running") end(ticket, entry, "running", true);
+      else end(ticket, entry, "error", true);
+      return true;
+    }
+  };
+}
+
+// OP#1840 Nachtrag 1: fp:forwarded {kind, id, ticket, result}. Ungültige Werte fallen weg (null).
+function fpParseForwarded(data) {
+  data = data || {};
+  var id = fpTicketNumber(data.id);
+  var ticket = fpTicketNumber(data.ticket);
+  if ((data.kind !== "answer" && data.kind !== "assumption") || !id || !ticket) return null;
+  if (data.result !== "sent" && data.result !== "pending" && data.result !== "no-thread") return null;
+  return { kind: data.kind, id: id, ticket: ticket, result: data.result };
+}
+
+// Hinweis an der Zeile: bei pending "Der Agent hat die Antwort noch nicht erhalten", bei no-thread "Kein Chat zu diesem
+// Ticket"; ein späteres sent nimmt ihn zurück. Die Zeile einer Antwort ist das Element der Rückfrage, die einer
+// Annahme die Abnahmekarte des Tickets.
+function fpShowForwarded(parsed) {
+  if (!parsed) return;
+  var holders = document.querySelectorAll(parsed.kind === "answer"
+    ? "[data-fp-question='" + parsed.id + "']"
+    : "[data-fp-result='" + parsed.ticket + "']");
+  var home = document.getElementById("fp-home");
+  var labels = {};
+  try { labels = JSON.parse((home && home.dataset.fpForwardLabels) || "{}") || {}; } catch (error) { labels = {}; }
+  var text = (parsed.result === "pending" ? labels.pending : labels.no_thread) ||
+    (parsed.result === "pending" ? "Der Agent hat die Antwort noch nicht erhalten" : "Kein Chat zu diesem Ticket");
+  Array.prototype.forEach.call(holders, function (holder) {
+    var note = holder.querySelector("[data-fp-forward-note]");
+    if (parsed.result === "sent") {
+      if (note) note.remove();
+      return;
+    }
+    if (!note) {
+      note = document.createElement("p");
+      note.className = "fp-q-note is-error";
+      note.setAttribute("data-fp-forward-note", "");
+      note.setAttribute("role", "status");
+      holder.appendChild(note);
+    }
+    note.setAttribute("data-pending", parsed.result);
+    note.textContent = text;
+  });
+}
+
+// Taste s und Knopf gelten nur für Zeilen ohne laufenden Zustand (nicht working, approval, input) und nie für Abnahmekarten.
+function fpStartable(node) {
+  var id = fpTicketNumber(node && node.dataset && node.dataset.id);
+  if (!id || node.dataset.kind === "result") return false;
+  var entry = fpRunStore.states[id];
+  return !entry || entry.state === "error";
+}
+
 // OP#1840: Hintergrundstart eines Tickets (Taste s, Knopf „Im Hintergrund starten“). Die Zeile (Arbeitsliste, Board-Karte,
 // Braucht-dich-Zeile) trägt die Ticketnummer; fpMountChat holt den Kontext und schickt fp:start.
 function fpStartTicket(node) {
@@ -501,7 +601,7 @@ function fpRunPills() {
       var line = node.querySelector(".fp-wl-line, .fp-card-line");
       // OP#1840: „Im Hintergrund starten“ nur an Tickets ohne Thread-Zustand (kein laufender Agent).
       var starter = node.querySelector("[data-fp-start]");
-      if (starter) starter.hidden = !!entry;
+      if (starter) starter.hidden = !!entry && entry.state !== "error";
       if (!entry) {
         if (pill) pill.remove();
         return;
@@ -595,7 +695,8 @@ function fpInbox(main) {
   function order() {
     var all = rows();
     var sorted = all.slice().sort(function (a, b) {
-      return (Number(a.dataset.rank) - Number(b.dataset.rank)) || (Number(a.dataset.since) - Number(b.dataset.since)) ||
+      return (Number(a.dataset.rank) - Number(b.dataset.rank)) || (Number(a.dataset.group || 0) - Number(b.dataset.group || 0)) ||
+        (Number(a.dataset.since) - Number(b.dataset.since)) ||
         (Number(a.dataset.id) - Number(b.dataset.id));
     });
     if (sorted.every(function (row, index) { return row === all[index]; })) return;
@@ -605,7 +706,8 @@ function fpInbox(main) {
   }
 
   function recount() {
-    var count = rows().filter(open).length;
+    // Karten über dem Limit der Liste (Hinweis "+N weitere") zählen mit, auch wenn ihre Zeilen fehlen.
+    var count = rows().filter(open).length + (Number(box.dataset.fpMore) || 0);
     if (total) total.textContent = String(count);
     if (empty) empty.hidden = rows().length > 0;
     if (counter) {
@@ -637,7 +739,9 @@ function fpInbox(main) {
   function settle() {
     recount();
     window.setTimeout(function () {
-      rows().forEach(function (row) { if (!open(row)) row.remove(); });
+      rows().forEach(function (row) {
+        if (!open(row) && !row.querySelector("[data-fp-forward-note][data-pending]")) row.remove();
+      });
       recount();
     }, 2500);
   }
@@ -758,7 +862,9 @@ function fpInbox(main) {
       var next = move(1, true);
       if (next) openRow(next);
     } else if (key === "o" && row) openRow(row);
-    else if (key === "s" && row) fpStartTicket(row);
+    else if (key === "s" && row) {
+      if (!event.repeat && fpStartable(row)) fpStartTicket(row);
+    }
     else if (key === "Enter" && row && target === row) openRow(row);
     else if (/^[1-9]$/.test(key) && row) {
       var option = row.querySelectorAll(".fp-q-option")[Number(key) - 1];
@@ -949,6 +1055,10 @@ function fpMountChat(root, frame) {
       finishStart(data);
       return;
     }
+    if (data.type === "fp:forwarded") {
+      fpShowForwarded(fpParseForwarded(data));
+      return;
+    }
     if (data.type === "fp:activity" && bar) {
       fpPublishRun(fpParseActivity(data));
       return;
@@ -1049,9 +1159,7 @@ function fpMountChat(root, frame) {
                      error: "Start nicht möglich", no_context: "Ticket nicht verfügbar" };
     return startLabels[key] || fallback[key] || "";
   }
-  var pendingStarts = {};
-  function startNote(ticket, text, error) {
-    var entry = pendingStarts[ticket];
+  function startNote(entry, text, error) {
     var node = entry && entry.node;
     if (!node || !node.isConnected) return;
     var note = node.querySelector("[data-fp-start-note]");
@@ -1067,59 +1175,33 @@ function fpMountChat(root, frame) {
     note.classList.toggle("is-error", !!error);
     note.hidden = !text;
   }
-  function endStart(ticket) {
-    var entry = pendingStarts[ticket];
-    if (!entry) return;
-    window.clearTimeout(entry.timer);
-    var button = entry.node && entry.node.isConnected ? entry.node.querySelector("[data-fp-start]") : null;
-    if (button) button.disabled = false;
-  }
-  function finishStart(data) {
-    var ticket = fpTicketNumber(data.ticket);
-    if (!ticket || !pendingStarts[ticket]) return;
-    var reason = data.reason === "slots" || data.reason === "running" || data.reason === "error" ? data.reason : null;
-    if (data.result === "accepted") startNote(ticket, startText("accepted"), false);
-    else if (reason === "slots") startNote(ticket, startText("slots_full"), true);
-    else if (reason === "running") startNote(ticket, startText("running"), true);
-    else startNote(ticket, startText("error"), true);
-    endStart(ticket);
-  }
-  // `bar` ist erst weiter unten gesetzt; geprüft wird beim Ereignis.
-  {
-    window.addEventListener("fp:start-request", function (event) {
-      if (!bar || !frame) return;
-      var detail = event.detail || {};
-      var ticket = fpTicketNumber(detail.id);
-      if (!ticket || (pendingStarts[ticket] && pendingStarts[ticket].busy)) return;
-      pendingStarts[ticket] = { node: detail.node, busy: true, timer: 0 };
-      var button = detail.node && detail.node.querySelector ? detail.node.querySelector("[data-fp-start]") : null;
-      if (button) button.disabled = true;
-      startNote(ticket, startText("sending"), false);
-      fetch("/flightplan/chat/context?wp=" + encodeURIComponent(ticket), {
+  var starts = fpStartTracker({
+    text: startText,
+    post: function (message) { post(message); },
+    note: startNote,
+    busy: function (entry, on) {
+      var button = entry.node && entry.node.isConnected && entry.node.querySelector ? entry.node.querySelector("[data-fp-start]") : null;
+      if (button) button.disabled = !!on;
+    },
+    later: function (fn, ms) { return window.setTimeout(fn, ms); },
+    clear: function (timer) { window.clearTimeout(timer); },
+    context: function (ticket) {
+      return fetch("/flightplan/chat/context?wp=" + encodeURIComponent(ticket), {
         headers: { "Accept": "application/json" },
         credentials: "same-origin"
       }).then(function (response) {
         return response.ok ? response.json() : null;
       }).then(function (payload) {
-        if (!payload || !payload.ok || !payload.wp || Number(payload.wp.id) !== ticket) {
-          startNote(ticket, startText("no_context"), true);
-          pendingStarts[ticket].busy = false;
-          endStart(ticket);
-          return;
-        }
-        pendingStarts[ticket].busy = false;
-        pendingStarts[ticket].timer = window.setTimeout(function () {
-          startNote(ticket, startText("error"), true);
-          endStart(ticket);
-        }, 15000);
-        post({ type: "fp:start", ticket: ticket, context: payload.wp });
-      }).catch(function () {
-        startNote(ticket, startText("error"), true);
-        pendingStarts[ticket].busy = false;
-        endStart(ticket);
+        return payload && payload.ok && payload.wp ? payload.wp : null;
       });
-    });
-  }
+    }
+  });
+  function finishStart(data) { starts.started(data); }
+  // `bar` ist erst weiter unten gesetzt; geprüft wird beim Ereignis.
+  window.addEventListener("fp:start-request", function (event) {
+    if (!bar || !frame) return;
+    starts.request(event.detail);
+  });
 
   // OP#1674: Klick auf eine Board-Karte im Dashboard gibt dem Chat das Ticket als Kontext.
   window.addEventListener("fp:card-selected", function (event) {
@@ -1748,7 +1830,7 @@ function fpWorklist(main) {
     var row = target && target.closest ? target.closest("[data-fp-worklist-row]") : null;
     var key = event.key;
     if (key === "s" && row) {
-      if (row.querySelector("[data-fp-start]:not([hidden])")) fpStartTicket(row);
+      if (!event.repeat && row.querySelector("[data-fp-start]:not([hidden])") && fpStartable(row)) fpStartTicket(row);
     } else if (key === "j" || key === "ArrowDown") move(1);
     else if (key === "k" || key === "ArrowUp") move(-1);
     else if (key === "Enter" && row) openRow(row);
