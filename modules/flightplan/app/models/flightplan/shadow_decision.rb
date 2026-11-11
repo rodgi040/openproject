@@ -8,6 +8,8 @@ module Flightplan
 
     SOURCES = %w[ask chat].freeze
     FIELD_MAX = 500
+    # Echte requestIds aus T3 sind etwa 320 Zeichen lang.
+    REQUEST_ID_MAX = 1024
 
     belongs_to :work_package
     belongs_to :question, optional: true
@@ -15,6 +17,6 @@ module Flightplan
     validates :source, inclusion: { in: SOURCES }
     validates :chosen, :rule, presence: true
     validates :recommended, :chosen, length: { maximum: FIELD_MAX }
-    validates :request_id, length: { maximum: 200 }
+    validates :request_id, length: { maximum: REQUEST_ID_MAX }
   end
 end

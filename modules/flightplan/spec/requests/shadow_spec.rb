@@ -76,6 +76,17 @@ RSpec.describe "Flightplan shadow measurement", type: :rails_request do
       expect(Flightplan::ShadowDecision.count).to eq(1)
     end
 
+    it "accepts a real 321-character request id and the limit of 1024, and records each only once" do
+      login(admin)
+      with_csrf { report(request_id: "q" * 321) }
+      expect(response).to have_http_status(:ok), response.body
+      with_csrf { report(request_id: "q" * 321) }
+      expect(JSON.parse(response.body)["recorded"]).to be(false)
+      with_csrf { report(request_id: "z" * 1024) }
+      expect(response).to have_http_status(:ok), response.body
+      expect(Flightplan::ShadowDecision.pluck(:request_id).map(&:length)).to contain_exactly(321, 1024)
+    end
+
     it "records the same request only once" do
       login(admin)
       with_csrf { report }
@@ -158,7 +169,7 @@ RSpec.describe "Flightplan shadow measurement", type: :rails_request do
       expect(response).to have_http_status(:unprocessable_entity)
       with_csrf { report(chosen: "x" * 501) }
       expect(response).to have_http_status(:unprocessable_entity)
-      with_csrf { report(request_id: "r" * 201) }
+      with_csrf { report(request_id: "r" * 1025) }
       expect(response).to have_http_status(:unprocessable_entity)
       with_csrf { report(chosen: { "a" => "b" }) }
       expect(response).to have_http_status(:unprocessable_entity)

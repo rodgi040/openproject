@@ -11,7 +11,7 @@ module Flightplan
     no_authorization_required! :create
 
     FIELD_MAX = ShadowDecision::FIELD_MAX
-    REQUEST_ID_MAX = 200
+    REQUEST_ID_MAX = ShadowDecision::REQUEST_ID_MAX
 
     def create
       work_package = WorkPackage.visible(User.current).find_by(id: positive_integer(params[:ticket]))

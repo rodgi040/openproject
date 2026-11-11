@@ -10,8 +10,10 @@ const ticketFn = source.match(/function fpTicketNumber[\s\S]*?\n}\n/)[0];
 const block = source.match(/\/\/ FP-REQUESTS-BEGIN[\s\S]*?\/\/ FP-REQUESTS-END/)[0];
 const ctx = {};
 vm.createContext(ctx);
-vm.runInContext(`${ticketFn}\n${block}\nthis.api = { fpParseRequests, fpRespondMessage, fpParseResponded, fpShadowBody, fpEnterOption, fpVisibleDetail };`, ctx);
-const { fpParseRequests, fpRespondMessage, fpParseResponded, fpShadowBody, fpEnterOption, fpVisibleDetail } = ctx.api;
+const activityFn = source.match(/function fpParseActivity[\s\S]*?\n}\n/)[0];
+const priority = source.match(/var FP_RUN_PRIORITY = .*;/)[0];
+vm.runInContext(`${ticketFn}\n${priority}\n${block}\n${activityFn}\nthis.api = { fpParseRequests, fpRespondMessage, fpParseResponded, fpShadowBody, fpEnterOption, fpVisibleDetail, fpParseActivity };`, ctx);
+const { fpParseRequests, fpRespondMessage, fpParseResponded, fpShadowBody, fpEnterOption, fpVisibleDetail, fpParseActivity } = ctx.api;
 
 const question = (extra = {}) => ({
   requestId: "r1", kind: "question", createdAt: "2026-11-11T10:00:00Z", answerable: true,
@@ -35,7 +37,13 @@ assert.strictEqual(fpParseRequests({ ticket: "x", items: [] }), null);
 assert.strictEqual(fpParseRequests({ ticket: 12, items: "nope" }), null);
 assert.strictEqual(parse([]).items.length, 0);
 assert.strictEqual(parse([{ ...question(), kind: "plan" }]).items.length, 0, "unknown kind is ignored");
-assert.strictEqual(parse([question({ requestId: "" }), question({ requestId: 5 }), question({ requestId: "x".repeat(201) })]).items.length, 0);
+assert.strictEqual(parse([question({ requestId: "" }), question({ requestId: 5 }), question({ requestId: "x".repeat(1025) })]).items.length, 0);
+const longId = "r".repeat(321);
+assert.strictEqual(parse([question({ requestId: longId })]).items[0].requestId, longId, "real 321-character ids are accepted");
+assert.strictEqual(parse([question({ requestId: "r".repeat(1024) })]).items.length, 1);
+assert.strictEqual(parse([question()], { threadId: "t".repeat(300) }).threadId, "t".repeat(300));
+assert.strictEqual(fpParseResponded({ ticket: 1, requestId: longId, result: "ok" }).requestId, longId);
+assert.strictEqual(fpParseResponded({ ticket: 1, requestId: "r".repeat(1025), result: "ok" }), null);
 assert.strictEqual(parse([question({ question: { text: "", options: [] } })]).items.length, 0);
 assert.strictEqual(parse([approval({ approval: { detail: "  " } })]).items.length, 0);
 assert.strictEqual(parse([question()], { threadId: 7 }).threadId, null);
@@ -43,6 +51,13 @@ assert.strictEqual(parse([question({ answerable: false })]).items[0].answerable,
 assert.strictEqual(parse([question({ question: { ...question().question, multiSelect: true } })]).items[0].answerable, false);
 assert.strictEqual(parse([approval({ approval: { detail: "x".repeat(20001), reason: null, tool: null } })]).items[0].answerable, false);
 assert.strictEqual(parse(Array.from({ length: 30 }, (_, i) => question({ requestId: `r${i}` }))).items.length, 20);
+
+// fp:activity v2 (live seit Phase 2a): threadIds bis 1024 Zeichen bleiben unverkürzt (früher auf 200 gekürzt)
+for (const length of [36, 206, 1024]) {
+  const id = "t".repeat(length);
+  assert.strictEqual(fpParseActivity({ states: [{ ticket: 5, threadId: id, state: "approval" }] })[5].thread, id, `threadId ${length}`);
+}
+assert.strictEqual(fpParseActivity({ states: [{ ticket: 5, threadId: "t".repeat(1500), state: "input" }] })[5].thread.length, 1024);
 
 // fp:respond
 const [q, a] = parsed.items;

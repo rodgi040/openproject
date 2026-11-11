@@ -19,7 +19,9 @@ class CreateFlightplanShadowDecisions < ActiveRecord::Migration[8.0]
       t.timestamps
     end
 
-    add_index :flightplan_shadow_decisions, %i[source request_id work_package_id],
+    # request_id trägt bis 1024 Zeichen (echte IDs aus T3: etwa 320). Ein B-Tree über so lange Texte kann an die Zeilengrenze
+    # von PostgreSQL stoßen; deshalb geht der Hash der ID in den Index, nicht der Text.
+    add_index :flightplan_shadow_decisions, "source, md5(request_id), work_package_id",
               unique: true, where: "request_id IS NOT NULL", name: "index_flightplan_shadow_one_per_request"
   end
 

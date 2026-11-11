@@ -565,7 +565,7 @@ function fpParseActivity(data) {
   if (Array.isArray(data.states)) {
     data.states.slice(0, 200).forEach(function (entry) {
       if (!entry || typeof entry !== "object") return;
-      put(entry.ticket, entry.state, typeof entry.threadId === "string" ? entry.threadId.slice(0, 200) : null);
+      put(entry.ticket, entry.state, typeof entry.threadId === "string" ? entry.threadId.slice(0, FP_REQ_ID_MAX) : null);
     });
   } else if (Array.isArray(data.tickets)) {
     data.tickets.slice(0, 200).forEach(function (value) { put(value, "working", null); });
@@ -621,7 +621,9 @@ function fpRunPills() {
 // FP-REQUESTS-BEGIN
 // OP#1842: Anfragen aus dem Chat (Vertrag Phase 3, Abschnitte 1 bis 3). Reine Funktionen ohne DOM und Netz; fpInbox zeigt sie an.
 // Alles aus dem Rahmen ist untrusted: jedes Feld wird geprüft, Längen werden begrenzt, unbekannte kind fallen weg.
-var FP_REQ_MAX = { items: 20, options: 20, id: 200, label: 500, description: 2000, text: 4000, detail: 20000, reason: 2000, tool: 200 };
+// requestId und threadId aus T3 sind lang (echte requestIds: etwa 320 Zeichen); Grenze 1024.
+var FP_REQ_ID_MAX = 1024;
+var FP_REQ_MAX = { items: 20, options: 20, id: FP_REQ_ID_MAX, label: 500, description: 2000, text: 4000, detail: 20000, reason: 2000, tool: 200 };
 
 var FP_REQ_DECEPTIVE = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/;
 var FP_REQ_DECEPTIVE_ALL = new RegExp(FP_REQ_DECEPTIVE.source, "g");
