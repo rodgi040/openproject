@@ -10,8 +10,8 @@ const ticketFn = source.match(/function fpTicketNumber[\s\S]*?\n}\n/)[0];
 const block = source.match(/\/\/ FP-REQUESTS-BEGIN[\s\S]*?\/\/ FP-REQUESTS-END/)[0];
 const ctx = {};
 vm.createContext(ctx);
-vm.runInContext(`${ticketFn}\n${block}\nthis.api = { fpParseRequests, fpRespondMessage, fpParseResponded, fpShadowBody, fpEnterOption };`, ctx);
-const { fpParseRequests, fpRespondMessage, fpParseResponded, fpShadowBody, fpEnterOption } = ctx.api;
+vm.runInContext(`${ticketFn}\n${block}\nthis.api = { fpParseRequests, fpRespondMessage, fpParseResponded, fpShadowBody, fpEnterOption, fpVisibleDetail };`, ctx);
+const { fpParseRequests, fpRespondMessage, fpParseResponded, fpShadowBody, fpEnterOption, fpVisibleDetail } = ctx.api;
 
 const question = (extra = {}) => ({
   requestId: "r1", kind: "question", createdAt: "2026-11-11T10:00:00Z", answerable: true,
@@ -67,6 +67,24 @@ assert.strictEqual(fpParseResponded({ ticket: 12, requestId: "r1", result: "mayb
 assert.strictEqual(fpParseResponded({ ticket: 0, requestId: "r1", result: "ok" }), null);
 assert.strictEqual(fpParseResponded({ ticket: 1, requestId: "", result: "ok" }), null);
 
+// Täuschende Zeichen im Befehl: keine Knöpfe, sichtbar ersetzt
+for (const ch of ["\u202E", "\u2066", "\u200B", "\u200F", "\u2060", "\uFEFF", "\u0007", "\r", "\u007F", "\u0085"]) {
+  const det = `ls ${ch}-la`;
+  const p = parse([approval({ approval: { detail: det, reason: null, tool: null } })]);
+  assert.strictEqual(p.items[0].answerable, false, `U+${ch.charCodeAt(0).toString(16)} blocks the buttons`);
+  assert.ok(!/[\u202E\u2066\u200B\u200F\u2060\uFEFF\u0007\r\u007F\u0085]/.test(fpVisibleDetail(det)));
+  assert.ok(fpVisibleDetail(det).includes("<U+"));
+}
+assert.strictEqual(parse([approval({ approval: { detail: "a\tb\nc", reason: null, tool: null } })]).items[0].answerable, true, "tab and newline are fine");
+assert.strictEqual(fpVisibleDetail("x\u202Ey"), "x<U+202E>y");
+
+// verworfene Optionen
+const dropped = (label) => parse([question({ question: { text: "T", multiSelect: false, options: [
+  { label: "ok", description: null, recommended: false }, { label, description: null, recommended: false }] } })]).items[0];
+assert.strictEqual(dropped("").answerable, false);
+assert.strictEqual(dropped("x".repeat(501)).answerable, false);
+assert.strictEqual(dropped("fine").answerable, true);
+
 // Schatten-Körper: nur bei gewählter Option und vorhandener Empfehlung
 assert.deepStrictEqual({ ...fpShadowBody(parsed, q, "Nein") },
   { ticket: "12", request_id: "r1", recommended: "Ja (Recommended)", chosen: "Nein" });
@@ -77,8 +95,13 @@ assert.strictEqual(fpShadowBody(noRec, noRec.items[0], "A"), null, "no recommend
 
 // Enter-Regel
 assert.strictEqual(fpEnterOption("Ja", "true", ["Ja", "Nein"]), "Ja");
-assert.strictEqual(fpEnterOption("Ja", "", ["Ja", "Nein"]), "Ja", "unknown reversibility still takes it");
+assert.strictEqual(fpEnterOption("Ja", "", ["Ja", "Nein"]), null, "unknown reversibility: Enter does nothing");
 assert.strictEqual(fpEnterOption("Ja", "false", ["Ja", "Nein"]), null, "not reversible: click only");
+assert.strictEqual(fpEnterOption("Ja", "true", ["Ja", "Nein"], "entscheidung"), "Ja");
+assert.strictEqual(fpEnterOption("Ja", "true", ["Ja", "Nein"], ""), "Ja", "empty kind is fine");
+for (const kind of ["freigabe", "zugang", "abnahme", "auto"]) {
+  assert.strictEqual(fpEnterOption("Ja", "true", ["Ja", "Nein"], kind), null, `kind ${kind}: click only`);
+}
 assert.strictEqual(fpEnterOption("", "true", ["Ja"]), null);
 assert.strictEqual(fpEnterOption(undefined, "true", ["Ja"]), null);
 assert.strictEqual(fpEnterOption("Ja", "true", ["Nein"]), null, "recommendation not among options");

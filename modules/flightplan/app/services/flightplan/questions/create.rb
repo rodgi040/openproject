@@ -15,7 +15,8 @@ module Flightplan
         @work_package = work_package
         @question = question.to_s
         @context = context
-        @options = Array(options).map(&:to_s)
+        # Optionen und Empfehlung werden gleich behandelt (beide getrimmt), damit kein irreführendes 422 entsteht.
+        @options = Array(options).map { |option| option.to_s.strip }
         @kind = kind.to_s.strip.presence
         @recommended = recommended.to_s.strip.presence
         @reversible = reversible

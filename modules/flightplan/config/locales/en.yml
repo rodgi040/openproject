@@ -77,6 +77,7 @@ en:
       gone: "already done or changed"
       failed: "not delivered, check in the chat"
       too_long: "Command too long to display, please answer in the chat"
+      shadow_failed: "Measurement not saved"
     shadow:
       title: "Shadow measurement"
       summary: "Shadow: %{total} cases, %{matched} as recommended; the rule would have decided %{would_auto} times, %{wrong} of them wrong"

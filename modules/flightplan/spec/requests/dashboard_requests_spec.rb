@@ -33,6 +33,7 @@ RSpec.describe "Flightplan structured questions in the dashboard", :skip_csrf, t
       row = page.at_css("#fp-inbox [data-fp-question='#{question.id}']")
       expect(row["data-fp-recommended"]).to eq("B")
       expect(row["data-fp-reversible"]).to eq("true")
+      expect(row["data-fp-qkind"]).to eq("entscheidung")
       expect(row.at_css(".fp-q-kind[data-fp-kind='entscheidung']").text).to eq("Entscheidung")
       expect(row.at_css(".fp-q-consequence").text).to include("Folge", "Danach neu bauen")
       expect(row.css("button.fp-q-option").map { |node| [node["value"], node["class"].include?("is-recommended")] })
@@ -40,6 +41,18 @@ RSpec.describe "Flightplan structured questions in the dashboard", :skip_csrf, t
       expect(row.at_css("button.is-recommended .fp-q-rec").text).to include("empfohlen")
       expect(row.at_css(".fp-q-hint").text).to include("Enter")
       expect(row.at_css("[data-fp-irreversible]")).to be_nil
+    end
+
+    it "offers the Enter hint only for an explicitly reversible decision (or without kind)" do
+      unknown = ask(kind: "entscheidung", recommended_option: "A")
+      other_kind = ask(kind: "freigabe", recommended_option: "A", reversible: true)
+      no_kind = ask(recommended_option: "A", reversible: true)
+      get "/"
+
+      hint = ->(question) { page.at_css("#fp-inbox [data-fp-question='#{question.id}'] .fp-q-hint") }
+      expect(hint.call(unknown)).to be_nil
+      expect(hint.call(other_kind)).to be_nil
+      expect(hint.call(no_kind).text).to include("Enter")
     end
 
     it "marks a not reversible question and offers no Enter hint" do

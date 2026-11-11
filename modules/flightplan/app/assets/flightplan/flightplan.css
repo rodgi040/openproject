@@ -2507,8 +2507,7 @@ a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addon
 .fp-req-command {
   margin: 0.25rem 0;
   padding: 0.4rem 0.5rem;
-  max-height: 14rem;
-  overflow: auto;
+  overflow-x: auto;
   border: 1px solid var(--borderColor-default, #d0d7de);
   border-radius: 6px;
   background: var(--bgColor-muted, #f6f8fa);

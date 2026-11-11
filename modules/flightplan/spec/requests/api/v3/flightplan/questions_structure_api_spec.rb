@@ -63,6 +63,14 @@ RSpec.describe "API v3 flightplan questions with structure", type: :request, con
     expect(body["options"]).to eq(%w[A B])
   end
 
+  it "treats options and recommendation alike: both are trimmed" do
+    post "/api/v3/flightplan/questions", { work_package_id: work_package.id, question: "Trim?", options: [" A ", "B"],
+                                           recommended_option: " A " }.to_json
+
+    expect(last_response.status).to eq(201), last_response.body
+    expect(JSON.parse(last_response.body)).to include("options" => %w[A B], "recommended_option" => "A")
+  end
+
   it "answers 422 when the recommendation is not among the options" do
     ask(recommended_option: "C")
 

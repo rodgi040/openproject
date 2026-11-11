@@ -77,6 +77,7 @@ de:
       gone: "schon erledigt oder geändert"
       failed: "nicht zugestellt, im Chat prüfen"
       too_long: "Befehl zu lang für die Anzeige, bitte im Chat beantworten"
+      shadow_failed: "Messung nicht gespeichert"
     shadow:
       title: "Schatten-Messung"
       summary: "Schatten: %{total} Fälle, davon %{matched} wie empfohlen; Regel hätte %{would_auto}-mal entschieden, davon %{wrong} falsch"

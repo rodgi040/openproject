@@ -10,7 +10,7 @@
      data-fp-run-labels="<%= Flightplan::Worklist::RUN_STATES.to_h { |state| [state, t("flightplan.worklist.inbox.states.#{state}")] }.to_json %>"
      data-fp-start-labels="<%= %w[sending accepted running slots_full error no_context].to_h { |key| [key, t("flightplan.start.#{key}")] }.to_json %>"
      data-fp-forward-labels="<%= %w[pending no_thread].to_h { |key| [key, t("flightplan.forward.#{key}")] }.to_json %>"
-     data-fp-request-labels="<%= %w[in_chat command reason approve decline free_text send_text sending answered gone failed too_long recommended].to_h { |key| [key, t("flightplan.requests.#{key}")] }.to_json %>"
+     data-fp-request-labels="<%= %w[in_chat command reason approve decline free_text send_text sending answered gone failed too_long recommended shadow_failed].to_h { |key| [key, t("flightplan.requests.#{key}")] }.to_json %>"
      data-menu-rail="<%= t("flightplan.home.menu_rail") %>"
      data-menu-unrail="<%= t("flightplan.home.menu_unrail") %>">
   <% if with_chat %>

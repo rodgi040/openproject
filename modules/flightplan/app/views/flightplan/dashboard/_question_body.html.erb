@@ -18,7 +18,7 @@
 <% if record.consequence.present? %>
   <p class="fp-q-consequence" data-fp-consequence><strong><%= t("flightplan.requests.consequence") %>:</strong> <%= record.consequence %></p>
 <% end %>
-<% if local_assigns[:enter_hint] && recommended && record.reversible != false %>
+<% if local_assigns[:enter_hint] && recommended && record.reversible == true && (record.kind.blank? || record.kind == "entscheidung") %>
   <p class="fp-q-hint"><kbd>Enter</kbd> <%= t("flightplan.requests.enter_hint") %></p>
 <% end %>
 <% if row[:context_text].present? && !compact %>

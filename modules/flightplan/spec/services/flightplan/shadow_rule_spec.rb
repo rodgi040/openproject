@@ -88,11 +88,35 @@ RSpec.describe Flightplan::ShadowRule do
       expect(verdict(texts: ["PASSWORT"]).would_auto).to be(false)
     end
 
-    it "respects word boundaries: Portierung, Transport and Portal are no port" do
-      ["Portierung auf Rust", "Transport der Daten", "Portal", "domain", "maintain", "remaining", "Hostile", "Dnsmasq"].each do |text|
+    it "needs a word boundary before the word: Transport, domain and maintain are no hit" do
+      %w[Transport domain maintain remaining Rapport Reporting].each do |text|
         expect(described_class.reserved_word(text)).to be_nil, "#{text} must not hit"
       end
-      expect(verdict(texts: ["Portierung der Funktion", %w[A B], "Nur Optik"]).would_auto).to be(true)
+      expect(verdict(texts: ["Welche Farbe?", %w[A B], "Nur Optik"]).would_auto).to be(true)
+    end
+
+    it "is open to the right for the short stems: compounds hit, even false positives (fail-closed, no exception list)" do
+      %w[Hostname Mailserver Portfreigabe Scopeänderung Portal Portierung Portfolio DNSSEC Gateway Costing Geldbeutel
+         Moneyball SSHKey Emailadresse Webhost localhost].each do |text|
+        expect(described_class.reserved_word(text)).to be_present, "#{text} must hit"
+      end
+      expect(verdict(texts: ["Portierung der Funktion"]).would_auto).to be(false)
+      expect(verdict(texts: ["Hostname ändern?"]).would_auto).to be(false)
+    end
+
+    it "keeps main and prod as whole words, with their own compound entries" do
+      %w[maintain mainly Produkt produce domain].each { |text| expect(described_class.reserved_word(text)).to be_nil, "#{text} must not hit" }
+      ["auf main", "mains", "Prod", "prod-Umgebung", "produktiv", "productive", "mainbranch", "main-branch"].each do |text|
+        expect(described_class.reserved_word(text)).to be_present, "#{text} must hit"
+      end
+    end
+
+    it "knows the additional words, in German and English" do
+      ["Prio erhöhen", "sshd neu starten", "Migration einspielen", "Datenbank wechseln", "Switch the database", "Credentials ablegen",
+       "API-Key neu", "api key", "APIKEY", "Run the migrations"].each do |text|
+        expect(described_class.reserved_word(text)).to be_present, "#{text} must hit"
+        expect(verdict(texts: [text]).would_auto).to be(false)
+      end
     end
 
     it "still matches plural and compound forms of the long stems" do

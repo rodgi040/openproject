@@ -623,6 +623,16 @@ function fpRunPills() {
 // Alles aus dem Rahmen ist untrusted: jedes Feld wird geprüft, Längen werden begrenzt, unbekannte kind fallen weg.
 var FP_REQ_MAX = { items: 20, options: 20, id: 200, label: 500, description: 2000, text: 4000, detail: 20000, reason: 2000, tool: 200 };
 
+var FP_REQ_DECEPTIVE = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/;
+var FP_REQ_DECEPTIVE_ALL = new RegExp(FP_REQ_DECEPTIVE.source, "g");
+
+// Befehlstext für die Anzeige: täuschende Zeichen werden als sichtbares <U+XXXX> eingesetzt (\n und \t bleiben).
+function fpVisibleDetail(text) {
+  return String(text).replace(FP_REQ_DECEPTIVE_ALL, function (ch) {
+    return "<U+" + ("0000" + ch.charCodeAt(0).toString(16).toUpperCase()).slice(-4) + ">";
+  });
+}
+
 function fpReqString(value, max, required) {
   if (typeof value !== "string") return required ? null : "";
   if (required && !value.trim()) return null;
@@ -650,7 +660,10 @@ function fpParseRequests(data) {
       var options = [];
       q.options.slice(0, FP_REQ_MAX.options).forEach(function (option) {
         if (!option || typeof option !== "object" || typeof option.label !== "string" || !option.label.trim() ||
-            option.label.length > FP_REQ_MAX.label) return;
+            option.label.length > FP_REQ_MAX.label) {
+          item.answerable = false; // verworfene Option: lieber im Chat beantworten als ein unvollständiges Angebot
+          return;
+        }
         options.push({
           label: option.label,
           description: typeof option.description === "string" ? option.description.slice(0, FP_REQ_MAX.description) : null,
@@ -665,6 +678,8 @@ function fpParseRequests(data) {
       if (!a || typeof a !== "object" || typeof a.detail !== "string" || !a.detail.trim()) return;
       // Ein gekürzter Befehl darf nie freigegeben werden: dann nur der Hinweis „im Chat beantworten“.
       if (a.detail.length > FP_REQ_MAX.detail) item.answerable = false;
+      // Täuschende Zeichen (Bidi, unsichtbar, Steuerzeichen, \r): keine Knöpfe, die Zeichen werden sichtbar ersetzt angezeigt.
+      if (FP_REQ_DECEPTIVE.test(a.detail)) item.answerable = false;
       item.approval = {
         detail: a.detail.slice(0, FP_REQ_MAX.detail),
         reason: typeof a.reason === "string" && a.reason ? a.reason.slice(0, FP_REQ_MAX.reason) : null,
@@ -721,11 +736,13 @@ function fpShadowBody(parsed, item, optionLabel) {
   return { ticket: String(parsed.ticket), request_id: item.requestId, recommended: recommended.label, chosen: optionLabel };
 }
 
-// Taste Enter auf einer Rückfrage-Zeile: nimmt die empfohlene Option, außer reversible ist falsch oder es gibt keine
-// (gültige) Empfehlung. reversible: "true" | "false" | "" (unbekannt). Gibt die Option oder null zurück.
-function fpEnterOption(recommended, reversible, options) {
+// Taste Enter auf einer Rückfrage-Zeile: nimmt die empfohlene Option NUR, wenn reversible ausdrücklich wahr ist, die Art leer
+// oder entscheidung ist und die Empfehlung unter den Optionen steht. reversible: "true" | "false" | "" (unbekannt).
+// Gibt die Option oder null zurück (dann bleibt Enter beim bisherigen Verhalten).
+function fpEnterOption(recommended, reversible, options, kind) {
   if (typeof recommended !== "string" || !recommended) return null;
-  if (reversible === "false" || reversible === false) return null;
+  if (reversible !== "true" && reversible !== true) return null;
+  if (kind && kind !== "entscheidung") return null;
   return (options || []).indexOf(recommended) === -1 ? null : recommended;
 }
 // FP-REQUESTS-END
@@ -892,7 +909,7 @@ function fpInbox(main) {
     if (item.kind === "approval") {
       node.setAttribute("data-fp-req-kind", "approval");
       node.appendChild(el("p", "fp-q-text", reqLabel("command") + (item.approval.tool ? " (" + item.approval.tool + ")" : "")));
-      node.appendChild(el("pre", "fp-req-command", item.approval.detail));
+      node.appendChild(el("pre", "fp-req-command", fpVisibleDetail(item.approval.detail)));
       if (item.approval.reason) node.appendChild(el("p", "fp-req-reason", reqLabel("reason") + ": " + item.approval.reason));
       if (!item.answerable) {
         node.appendChild(el("p", "fp-req-hint", reqLabel("in_chat")));
@@ -948,12 +965,42 @@ function fpInbox(main) {
     var holderNode = row && row.querySelector("[data-fp-requests]");
     if (!holderNode) return;
     requests[parsed.ticket] = parsed;
-    while (holderNode.firstChild) holderNode.removeChild(holderNode.firstChild);
     if (!parsed.items.length || !parsed.threadId) {
+      // Leere items heißen nicht „nichts offen“: die Zeile gehört zum Laufzustand aus fp:activity und bleibt mit dem Hinweis.
+      while (holderNode.firstChild) holderNode.removeChild(holderNode.firstChild);
       holderNode.appendChild(el("p", "fp-req-hint", reqLabel("in_chat")));
       return;
     }
-    parsed.items.forEach(function (item) { holderNode.appendChild(renderItem(item)); });
+    // Items mit gleicher requestId und gleichem Inhalt bleiben stehen (nichts wird unter dem Finger vertauscht).
+    var existing = {};
+    Array.prototype.slice.call(holderNode.children).forEach(function (child) {
+      var id = child.getAttribute("data-fp-request");
+      if (id) existing[id] = child;
+      else holderNode.removeChild(child);
+    });
+    parsed.items.forEach(function (item) {
+      var sig = JSON.stringify(item);
+      var node = existing[item.requestId];
+      if (node && node.getAttribute("data-fp-sig") === sig) {
+        delete existing[item.requestId];
+      } else {
+        node = renderItem(item);
+        node.setAttribute("data-fp-sig", sig);
+        if (existing[item.requestId]) holderNode.replaceChild(node, existing[item.requestId]);
+        delete existing[item.requestId];
+        if (!node.parentNode) holderNode.appendChild(node);
+      }
+    });
+    Object.keys(existing).forEach(function (id) { holderNode.removeChild(existing[id]); });
+    // Ziffern gelten nur bei genau einem offenen, beantwortbaren Frage-Item; sonst fallen die Zifferntasten-Marken weg.
+    if (digitItem(row) === null) row.querySelectorAll(".fp-req-option .fp-inbox-key").forEach(function (key) { key.remove(); });
+  }
+  // Das einzige offene, beantwortbare Frage-Item einer Zeile oder null (Zifferntasten).
+  function digitItem(row) {
+    var items = Array.prototype.slice.call(row.querySelectorAll(".fp-req-item[data-fp-req-kind='question']:not(.is-answered)"))
+      .filter(function (node) { return node.querySelector(".fp-req-option"); });
+    var open = row.querySelectorAll(".fp-req-item:not(.is-answered)").length;
+    return items.length === 1 && open === 1 ? items[0] : null;
   }
   window.addEventListener("fp:requests-in", function (event) { renderRequests(event.detail); });
 
@@ -969,10 +1016,12 @@ function fpInbox(main) {
     itemButtons(node, true);
     reqNote(node, reqLabel("sending"), false);
     var body = typeof input.optionLabel === "string" ? fpShadowBody(parsed, item, input.optionLabel) : null;
-    if (body) shadows[item.requestId] = body;
+    var now = Date.now();
+    Object.keys(shadows).forEach(function (id) { if (now - shadows[id].at > 600000) delete shadows[id]; });
+    if (body) shadows[item.requestId] = { body: body, at: now };
     window.clearTimeout(timers[item.requestId]);
+    // Der Eintrag in `shadows` bleibt nach dem Zeitlimit stehen: eine späte ok-Antwort wird noch protokolliert (10 Minuten).
     timers[item.requestId] = window.setTimeout(function () {
-      delete shadows[item.requestId];
       itemButtons(node, item.kind === "approval");
       reqNote(node, reqLabel("failed"), true);
     }, 15000);
@@ -986,18 +1035,32 @@ function fpInbox(main) {
       credentials: "same-origin",
       headers: { "Accept": "application/json", "X-CSRF-Token": meta ? meta.content : "", "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams(body).toString()
-    }).catch(function () {});
+    }).then(function (response) {
+      if (!response.ok) throw new Error("HTTP " + response.status);
+    }).catch(function (error) {
+      // Nicht still schlucken: Hinweis an der Schatten-Zeile (Admins) und in der Konsole.
+      if (window.console && console.warn) console.warn("Schatten-Messung nicht gespeichert", error);
+      var line = document.querySelector("[data-fp-shadow]");
+      if (line && !line.querySelector("[data-fp-shadow-failed]")) {
+        var failed = el("span", "is-error", " – " + reqLabel("shadow_failed"));
+        failed.setAttribute("data-fp-shadow-failed", "");
+        line.appendChild(failed);
+      }
+    });
   }
   window.addEventListener("fp:responded-in", function (event) {
     var done = event.detail;
-    var row = done && runRow(done.ticket);
+    if (!done) return;
+    // Die Messung zuerst: auch wenn Zeile oder Knoten schon weg sind, ist der Mensch beantwortet worden.
+    var entry = shadows[done.requestId];
+    if (done.result === "ok" && entry) postShadow(entry.body);
+    if (done.result !== "error") delete shadows[done.requestId];
+    var row = runRow(done.ticket);
     if (!row) return;
     var node = Array.prototype.slice.call(row.querySelectorAll("[data-fp-request]"))
       .filter(function (entry) { return entry.getAttribute("data-fp-request") === done.requestId; })[0];
     window.clearTimeout(timers[done.requestId]);
     delete timers[done.requestId];
-    var body = shadows[done.requestId];
-    delete shadows[done.requestId];
     if (!node) return;
     if (done.result === "error") {
       // „Nicht bestätigt“: eine Freigabe bleibt gesperrt (sie könnte angekommen sein), eine Frage darf neu gesendet werden.
@@ -1005,7 +1068,6 @@ function fpInbox(main) {
       reqNote(node, reqLabel("failed"), true);
       return;
     }
-    if (done.result === "ok" && body) postShadow(body);
     node.classList.add("is-answered");
     node.querySelectorAll(".fp-q-actions, textarea, .fp-q-send").forEach(function (part) { part.remove(); });
     reqNote(node, reqLabel(done.result === "ok" ? "answered" : "gone"), false);
@@ -1033,7 +1095,7 @@ function fpInbox(main) {
   function enterButton(row) {
     if (row.dataset.kind !== "question" || row.hasAttribute("data-fp-inbox-run")) return null;
     var buttons = Array.prototype.slice.call(row.querySelectorAll("button.fp-q-option[name='option']"));
-    var pick = fpEnterOption(row.dataset.fpRecommended, row.dataset.fpReversible || "", buttons.map(function (button) { return button.value; }));
+    var pick = fpEnterOption(row.dataset.fpRecommended, row.dataset.fpReversible || "", buttons.map(function (button) { return button.value; }), row.dataset.fpQkind || "");
     var match = pick === null ? null : buttons.filter(function (button) { return button.value === pick; })[0];
     return match && !match.disabled ? match : null;
   }
@@ -1196,7 +1258,13 @@ function fpInbox(main) {
       } else openRow(row);
     }
     else if (/^[1-9]$/.test(key) && row) {
-      var option = row.querySelectorAll(".fp-q-option")[Number(key) - 1];
+      // Zeilen mit Chat-Anfragen: Ziffern nur bei genau einem offenen, beantwortbaren Frage-Item.
+      var scope = row;
+      if (row.hasAttribute("data-fp-inbox-run")) {
+        scope = digitItem(row);
+        if (!scope) return;
+      }
+      var option = scope.querySelectorAll(".fp-q-option")[Number(key) - 1];
       if (!option || option.disabled) return;
       option.click();
     } else return;

@@ -24,7 +24,7 @@
             fp_inbox_row: "", kind: "question", rank: Flightplan::Worklist::INBOX_KINDS.index("question"),
             since: row[:since].to_i, id: row[:work_package_id], subject: row[:subject], project: row[:project_path].last,
             status: row[:status], labels: row[:labels].to_json, url: work_package_path(row[:work_package_id]),
-            fp_question: row[:id], fp_recommended: row[:question].recommended_option.presence,
+            fp_question: row[:id], fp_recommended: row[:question].recommended_option.presence, fp_qkind: row[:question].kind.to_s,
             fp_reversible: (row[:question].reversible.nil? ? nil : row[:question].reversible.to_s), fp_answered_text: t("flightplan.questions.widget.answered"), fp_saved_hint: t("flightplan.questions.answer_saved"),
             fp_sending_text: t("flightplan.questions.widget.sending"), fp_failed_text: t("flightplan.questions.widget.failed")
           } do %>
