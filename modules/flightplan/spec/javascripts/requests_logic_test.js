@@ -12,8 +12,8 @@ const ctx = {};
 vm.createContext(ctx);
 const activityFn = source.match(/function fpParseActivity[\s\S]*?\n}\n/)[0];
 const priority = source.match(/var FP_RUN_PRIORITY = .*;/)[0];
-vm.runInContext(`${ticketFn}\n${priority}\n${block}\n${activityFn}\nthis.api = { fpParseRequests, fpRespondMessage, fpParseResponded, fpShadowBody, fpEnterOption, fpVisibleDetail, fpParseActivity };`, ctx);
-const { fpParseRequests, fpRespondMessage, fpParseResponded, fpShadowBody, fpEnterOption, fpVisibleDetail, fpParseActivity } = ctx.api;
+vm.runInContext(`${ticketFn}\n${priority}\n${block}\n${activityFn}\nthis.api = { fpParseRequests, fpRespondMessage, fpParseResponded, fpShadowBody, fpEnterOption, fpVisibleDetail, fpParseActivity, fpRespondedAction };`, ctx);
+const { fpParseRequests, fpRespondMessage, fpParseResponded, fpShadowBody, fpEnterOption, fpVisibleDetail, fpParseActivity, fpRespondedAction } = ctx.api;
 
 const question = (extra = {}) => ({
   requestId: "r1", kind: "question", createdAt: "2026-11-11T10:00:00Z", answerable: true,
@@ -99,6 +99,11 @@ const dropped = (label) => parse([question({ question: { text: "T", multiSelect:
 assert.strictEqual(dropped("").answerable, false);
 assert.strictEqual(dropped("x".repeat(501)).answerable, false);
 assert.strictEqual(dropped("fine").answerable, true);
+
+// fp:responded: nur ok beendet die Zeile; gone lässt sie stehen und lädt den Stand neu (fp:requests-get); error lässt sie stehen
+assert.deepStrictEqual({ ...fpRespondedAction("ok") }, { finish: true, refetch: false, note: "answered" });
+assert.deepStrictEqual({ ...fpRespondedAction("gone") }, { finish: false, refetch: true, note: "gone" });
+assert.deepStrictEqual({ ...fpRespondedAction("error") }, { finish: false, refetch: false, note: "failed" });
 
 // Schatten-Körper: nur bei gewählter Option und vorhandener Empfehlung
 assert.deepStrictEqual({ ...fpShadowBody(parsed, q, "Nein") },

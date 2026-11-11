@@ -747,6 +747,14 @@ function fpEnterOption(recommended, reversible, options, kind) {
   if (kind && kind !== "entscheidung") return null;
   return (options || []).indexOf(recommended) === -1 ? null : recommended;
 }
+// Was nach fp:responded mit dem Item und der Zeile geschieht. Nur nach ok ist die Anfrage beantwortet und die Zeile darf
+// (wenn nichts Offenes bleibt) verschwinden. gone: die Zeile BLEIBT (die Anfrage kann im Thread noch offen sein, z. B. bei
+// geändertem Befehl), der Stand wird mit fp:requests-get neu geladen. error: nicht bestätigt, Zeile bleibt.
+function fpRespondedAction(result) {
+  if (result === "ok") return { finish: true, refetch: false, note: "answered" };
+  if (result === "gone") return { finish: false, refetch: true, note: "gone" };
+  return { finish: false, refetch: false, note: "failed" };
+}
 // FP-REQUESTS-END
 
 // OP#1835: Abschnitt „Braucht dich“. Rückfragen kommen vom Server (Zeilen mit Formular); Befehlsfreigabe, Lauf fehlgeschlagen
@@ -1017,6 +1025,8 @@ function fpInbox(main) {
     }
     itemButtons(node, true);
     reqNote(node, reqLabel("sending"), false);
+    var oldGone = row.querySelector("[data-fp-req-gone]");
+    if (oldGone) oldGone.remove();
     var body = typeof input.optionLabel === "string" ? fpShadowBody(parsed, item, input.optionLabel) : null;
     var now = Date.now();
     Object.keys(shadows).forEach(function (id) { if (now - shadows[id].at > 600000) delete shadows[id]; });
@@ -1070,9 +1080,24 @@ function fpInbox(main) {
       reqNote(node, reqLabel("failed"), true);
       return;
     }
+    var action = fpRespondedAction(done.result);
+    if (action.refetch) {
+      // Das Item verwerfen, den Hinweis an der Zeile zeigen und den aktuellen Stand holen; die Zeile bleibt.
+      node.remove();
+      var gone = row.querySelector("[data-fp-req-gone]");
+      if (!gone) {
+        gone = el("p", "fp-q-note is-error");
+        gone.setAttribute("data-fp-req-gone", "");
+        gone.setAttribute("role", "status");
+        row.appendChild(gone);
+      }
+      gone.textContent = reqLabel("gone");
+      askRequests(done.ticket);
+      return;
+    }
     node.classList.add("is-answered");
     node.querySelectorAll(".fp-q-actions, textarea, .fp-q-send").forEach(function (part) { part.remove(); });
-    reqNote(node, reqLabel(done.result === "ok" ? "answered" : "gone"), false);
+    reqNote(node, reqLabel(action.note), false);
     if (!row.querySelector(".fp-req-item:not(.is-answered)")) {
       row.classList.add("is-answered");
       window.dispatchEvent(new CustomEvent("fp:inbox-recount"));
