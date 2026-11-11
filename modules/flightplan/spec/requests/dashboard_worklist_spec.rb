@@ -87,6 +87,103 @@ RSpec.describe "Flightplan work list", :skip_csrf, type: :rails_request do
       expect(response.body).to include("function fpWorklist(main)", '"fp-home-left"', "fp:card-selected",
                                        'data.type === "fp:thread"', "fp:chat-active", "fp:chat-next")
     end
+
+    # OP#1835: Abschnitt „Braucht dich“ oben in der Arbeitsliste. Der Server liefert die offenen Rückfragen; die anderen
+    # Arten (Freigabe, Fehler, Eingabe) kommen im Browser aus fp:activity.
+    describe "section „Braucht dich“" do
+      let(:agent) { create(:user, firstname: "Coda", lastname: "Agentin", login: "coda-inbox") }
+      let(:inbox) { page.at_css("#fp-inbox") }
+
+      def ask(work_package, text, options: [], created_at: 1.hour.ago, status: "open")
+        Flightplan::Question.create!(work_package:, author: agent, question: text, options:, status:, created_at:)
+      end
+
+      let!(:newer) { ask(waiting[0], "Welcher Port <b>soll</b> es sein?", options: %w[8093 8094], created_at: 1.hour.ago) }
+      let!(:older) { ask(waiting[1], "Darf ich mergen?", created_at: 2.days.ago) }
+      let!(:answered) { ask(waiting[2], "Schon erledigt?", status: "answered") }
+
+      before { get "/" }
+
+      it "is the first element of the work list, above the tabs" do
+        children = page.at_css("#fp-worklist").element_children
+        expect(children.first["id"]).to eq("fp-inbox")
+        expect(children.second["class"]).to include("fp-wl-tabs")
+      end
+
+      it "lists exactly the open questions, oldest first, with question, options and answer buttons in the row" do
+        rows = inbox.css("[data-fp-inbox-row]")
+        expect(rows.map { |row| row["data-id"].to_i }).to eq([waiting[1].id, waiting[0].id])
+        expect(rows.map { |row| row["data-kind"] }.uniq).to eq(["question"])
+        row = rows.last
+        expect(row.at_css(".fp-q-text").text).to eq("Welcher Port <b>soll</b> es sein?")
+        expect(row.at_css(".fp-q-text b")).to be_nil
+        expect(row.css("button.fp-q-option").map { |button| button["value"] }).to eq(%w[8093 8094])
+        form = row.at_css("form[data-fp-question-form]")
+        expect(form["action"]).to eq("/flightplan/questions/#{newer.id}/answer")
+        expect(row["data-fp-question"]).to eq(newer.id.to_s)
+      end
+
+      it "leaves out mirrored „Wartet auf Mensch“ tickets without an open question and answered questions" do
+        ids = inbox.css("[data-fp-inbox-row]").map { |row| row["data-id"].to_i }
+        expect(ids).not_to include(waiting[2].id, waiting[3].id, waiting[4].id, running.id)
+        expect(inbox.at_css("[data-fp-inbox-total]").text).to eq("2")
+        expect(inbox.at_css("[data-fp-inbox-empty]")).to have_attributes(name: "p")
+        expect(inbox.at_css("[data-fp-inbox-empty]").key?("hidden")).to be(true)
+      end
+
+      it "shows the count in the view bar and does not limit the rows to four" do
+        3.times { |index| ask(waiting[2], "Weitere Frage #{index}", created_at: (index + 3).hours.ago) }
+        get "/"
+        rows = inbox.css("[data-fp-inbox-row]")
+        expect(rows.size).to eq(5)
+        expect(rows.count { |row| row.key?("hidden") }).to eq(0)
+        counter = page.at_css("[data-fp-viewbar] [data-fp-inbox-count]")
+        expect(counter.text.squish).to eq("Braucht dich (5)")
+        expect(counter.key?("hidden")).to be(false)
+      end
+
+      it "hides the counter and shows the empty text when nothing needs the user" do
+        Flightplan::Question.delete_all
+        get "/"
+        expect(page.at_css("[data-fp-inbox-count]").key?("hidden")).to be(true)
+        expect(page.at_css("[data-fp-inbox-empty]").key?("hidden")).to be(false)
+        expect(page.css("[data-fp-inbox-row]")).to be_empty
+      end
+
+      it "keeps text field ids unique although „Aufmerksamkeit“ shows the same question" do
+        ids = page.css("textarea[id]").map { |node| node["id"] }
+        expect(ids).to eq(ids.uniq)
+      end
+
+      it "ships labels for the run states and the keyboard logic of the section" do
+        labels = JSON.parse(page.at_css("#fp-home")["data-fp-run-labels"])
+        expect(labels).to eq("working" => "Agent arbeitet", "approval" => "Freigabe nötig", "input" => "Eingabe nötig",
+                             "error" => "Lauf fehlgeschlagen")
+        get "/flightplan/assets/flightplan.js"
+        expect(response.body).to include("function fpParseActivity(data)", "function fpInbox(main)", "fp:run-states",
+                                         "/^[1-9]$/.test(key)", "function fpRunPills()")
+      end
+    end
+
+    describe "ordering and filter rules of the section (service)" do
+      def entry(id, since, text = "Frage")
+        { id:, since: Time.zone.at(since), text: }
+      end
+
+      it "sorts by age, oldest first, and drops rows without a question text" do
+        rows = [entry(3, 300), entry(1, 100), entry(2, 100), entry(9, 50, "")]
+        expect(Flightplan::Worklist.inbox_questions(rows).map { |row| row[:id] }).to eq([1, 2, 3])
+        expect(Flightplan::Worklist.inbox_count(rows)).to eq(3)
+        expect(Flightplan::Worklist.inbox_questions(nil)).to eq([])
+      end
+
+      it "ranks approval before question before failure before input and is not limited by SHOWN" do
+        expect(Flightplan::Worklist::INBOX_KINDS).to eq(%w[approval question error input])
+        expect(Flightplan::Worklist::RUN_STATES).to eq(%w[working approval input error])
+        rows = Array.new(Flightplan::Worklist::SHOWN + 3) { |index| entry(index, index) }
+        expect(Flightplan::Worklist.inbox_questions(rows).size).to eq(rows.size)
+      end
+    end
   end
 
   describe "as a user without admin rights" do

@@ -174,7 +174,23 @@ en:
         other: "%{count} open"
       path_missing: "Path missing"
       no_hits: "No hits for this search."
-      keys: "j / k row · ↵ into the chat · o open ticket · . next · c new chat · / search · 1–4 tabs"
+      keys: "j / k row · ↵ into the chat · o open ticket · . next · c new chat · / search · 1–4 tabs · i needs you · 1–9 pick answer"
+      inbox:
+        title: "Needs you"
+        hint: "approval, question, failure, input"
+        empty: "Nothing is waiting for you."
+        count: "Needs you (%{count})"
+        count_hint: "Go to the „Needs you“ list"
+        kinds:
+          approval: "Command approval"
+          question: "Question"
+          error: "Run failed"
+          input: "Input needed"
+        states:
+          working: "Agent working"
+          approval: "Approval needed"
+          input: "Input needed"
+          error: "Run failed"
       hints:
         question: "waits for your answer"
         for_you: "planned, start needs your GO"

@@ -174,7 +174,23 @@ de:
         other: "%{count} offen"
       path_missing: "Weg fehlt"
       no_hits: "Keine Treffer für diese Suche."
-      keys: "j / k Zeile · ↵ in den Chat · o Ticket öffnen · . nächstes · c neuer Chat · / suchen · 1–4 Reiter"
+      keys: "j / k Zeile · ↵ in den Chat · o Ticket öffnen · . nächstes · c neuer Chat · / suchen · 1–4 Reiter · i Braucht dich · 1–9 Antwort wählen"
+      inbox:
+        title: "Braucht dich"
+        hint: "Freigabe, Rückfrage, Fehler, Eingabe"
+        empty: "Nichts wartet auf dich."
+        count: "Braucht dich (%{count})"
+        count_hint: "Zur Liste „Braucht dich“"
+        kinds:
+          approval: "Befehlsfreigabe"
+          question: "Rückfrage"
+          error: "Lauf fehlgeschlagen"
+          input: "Eingabe nötig"
+        states:
+          working: "Agent arbeitet"
+          approval: "Freigabe nötig"
+          input: "Eingabe nötig"
+          error: "Lauf fehlgeschlagen"
       hints:
         question: "wartet auf deine Antwort"
         for_you: "geplant, Start braucht dein GO"

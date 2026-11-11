@@ -1,0 +1,36 @@
+<%# OP#1835: Abschnitt „Braucht dich“, oberster Abschnitt der Arbeitsliste. Der Server liefert die offenen Rückfragen (Frage, Optionen
+    und Antwortformular in der Zeile, Antwortweg wie in „Aufmerksamkeit“, OP#1708). Befehlsfreigabe, Lauf fehlgeschlagen und
+    Eingabe nötig kennt nur T3; sie kommen per fp:activity und flightplan.js (fpInbox) fügt die Zeilen ein und sortiert nach
+    Rang und Alter. Keine Begrenzung auf Worklist::SHOWN. Titel und Fragen sind untrusted: nur escaped. %>
+<% entries = Flightplan::Worklist.inbox_questions(@questions_widget&.rows) %>
+<section class="fp-inbox" id="fp-inbox" data-fp-inbox data-server-count="<%= entries.size %>" aria-label="<%= t("flightplan.worklist.inbox.title") %>">
+  <header class="fp-inbox-head">
+    <strong><%= t("flightplan.worklist.inbox.title") %></strong>
+    <span class="fp-wl-count" data-fp-inbox-total><%= entries.size %></span>
+    <span class="fp-wl-hint"><%= t("flightplan.worklist.inbox.hint") %></span>
+  </header>
+  <p class="fp-wl-empty" data-fp-inbox-empty<%= " hidden".html_safe if entries.any? %>><%= t("flightplan.worklist.inbox.empty") %></p>
+  <ol class="fp-wl-rows fp-inbox-rows" data-fp-inbox-rows>
+    <% entries.each do |row| %>
+      <%= tag.li class: "fp-wl-row fp-inbox-row", tabindex: -1, data: {
+            fp_inbox_row: "", kind: "question", rank: Flightplan::Worklist::INBOX_KINDS.index("question"),
+            since: row[:since].to_i, id: row[:work_package_id], subject: row[:subject], project: row[:project_path].last,
+            status: row[:status], labels: row[:labels].to_json, url: work_package_path(row[:work_package_id]),
+            fp_question: row[:id], fp_answered_text: t("flightplan.questions.widget.answered"),
+            fp_sending_text: t("flightplan.questions.widget.sending"), fp_failed_text: t("flightplan.questions.widget.failed")
+          } do %>
+        <div class="fp-wl-line">
+          <span class="fp-run-pill fp-run-pill--question"><%= t("flightplan.worklist.inbox.kinds.question") %></span>
+          <%= link_to "##{row[:work_package_id]}", flightplan_workplace_path(row[:work_package_id]), class: "fp-wl-id", data: { turbo: false }, title: t("flightplan.worklist.open_ticket") %>
+          <span class="fp-wl-title"><%= row[:subject] %></span>
+          <time class="fp-wl-age" datetime="<%= row[:since].iso8601 %>" title="<%= l(row[:since], format: :short) %>"><%= Flightplan::Dashboard.age_label(row[:age_seconds]) %></time>
+        </div>
+        <div class="fp-wl-meta">
+          <span><%= row[:project] %></span>
+          <span><%= row[:agent].presence || "–" %></span>
+        </div>
+        <%= render "flightplan/dashboard/question_body", row:, return_to: "home", selected_scope: nil, compact: true, id_prefix: "fp-inbox-q-text" %>
+      <% end %>
+    <% end %>
+  </ol>
+</section>

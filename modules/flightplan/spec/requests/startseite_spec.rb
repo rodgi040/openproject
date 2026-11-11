@@ -145,7 +145,7 @@ RSpec.describe "Flightplan Startseite", :skip_csrf,
     it "marks tickets an agent is working on from fp:activity (OP#1802)" do
       get "/flightplan/assets/flightplan.js"
       js = response.body
-      expect(js).to include('data.type === "fp:activity"', "function markWorking(list)", "fp-chat-ticket-working-pill",
+      expect(js).to include('data.type === "fp:activity"', "function markRunStates(states)", "fp-chat-ticket-working-pill",
                             "function refreshStatus(id)")
       get "/"
       picker = Nokogiri::HTML(response.body).at_css("[data-fp-chat-tickets]")

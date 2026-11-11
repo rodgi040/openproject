@@ -7,6 +7,7 @@
      class="fp-home"
      data-fp-chat="<%= with_chat ? "1" : "0" %>"
      data-fp-view="split"
+     data-fp-run-labels="<%= Flightplan::Worklist::RUN_STATES.to_h { |state| [state, t("flightplan.worklist.inbox.states.#{state}")] }.to_json %>"
      data-menu-rail="<%= t("flightplan.home.menu_rail") %>"
      data-menu-unrail="<%= t("flightplan.home.menu_unrail") %>">
   <% if with_chat %>
@@ -21,9 +22,18 @@
         <button type="button" role="tab" id="fp-home-tab-dashboard" aria-controls="fp-home-main" aria-selected="true" data-fp-tab="dashboard"><%= t("flightplan.home.tab_dashboard") %></button>
         <button type="button" role="tab" id="fp-home-tab-chat" aria-controls="fp-home-chat" aria-selected="false" data-fp-tab="chat"><%= t("flightplan.home.tab_chat") %></button>
       </div>
-      <span class="fp-home-viewbar-hint" data-fp-view-hint
-            data-split="<%= t("flightplan.home.split_hint") %>"
-            data-narrow="<%= t("flightplan.home.narrow_hint") %>"><%= t("flightplan.home.split_hint") %></span>
+      <div class="fp-home-viewbar-end">
+        <% if @dashboard && @board_widget %>
+          <%# OP#1835: Zähler „Braucht dich (N)“; Klick zeigt die Arbeitsliste und springt in den Abschnitt. %>
+          <button type="button" class="fp-home-inbox" data-fp-inbox-count data-template="<%= t("flightplan.worklist.inbox.count", count: "__N__") %>"
+                  title="<%= t("flightplan.worklist.inbox.count_hint") %>"<%= " hidden".html_safe if Flightplan::Worklist.inbox_count(@questions_widget&.rows).zero? %>>
+            <%= t("flightplan.worklist.inbox.count", count: Flightplan::Worklist.inbox_count(@questions_widget&.rows)) %>
+          </button>
+        <% end %>
+        <span class="fp-home-viewbar-hint" data-fp-view-hint
+              data-split="<%= t("flightplan.home.split_hint") %>"
+              data-narrow="<%= t("flightplan.home.narrow_hint") %>"><%= t("flightplan.home.split_hint") %></span>
+      </div>
     </nav>
   <% end %>
 

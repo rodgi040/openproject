@@ -9,6 +9,7 @@
 <% project_rows = open_projects.map { |identifier, cards| { identifier:, name: cards.first.project_name, bereich: cards.first.bereich, count: cards.size } }
                                .sort_by { |row| [row[:bereich].to_s, row[:name].to_s.downcase] } %>
 <section class="fp-worklist" id="fp-worklist" data-fp-worklist aria-label="<%= t("flightplan.worklist.title") %>">
+  <%= render "flightplan/dashboard/inbox" %>
   <div class="fp-wl-tabs" role="tablist" aria-label="<%= t("flightplan.worklist.title") %>">
     <% tabs.each_with_index do |(tab, keys), index| %>
       <% count = tab == "projekte" ? project_rows.size : keys.sum { |key| columns[key]&.count.to_i } %>

@@ -393,6 +393,290 @@ function fpMergeEvents(known, incoming) {
   setOpen(window.localStorage.getItem(openKey) === "1");
 })();
 
+// OP#1835: Laufzustand je Ticket aus fp:activity (v2: states[{ticket, threadId, state}]; ohne states gilt tickets als working).
+// Der Speicher lebt nur im Browser. Unbekannte state-Werte und ungültige Ticketnummern fallen weg; mehrere Threads eines
+// Tickets zählen mit dem höchsten Rang (Freigabe vor Fehler vor Eingabe vor Arbeit).
+var FP_RUN_PRIORITY = { approval: 4, error: 3, input: 2, working: 1 };
+var FP_RUN_DEFAULT_LABELS = { working: "Agent arbeitet", approval: "Freigabe nötig", input: "Eingabe nötig", error: "Lauf fehlgeschlagen" };
+var fpRunStore = { states: {}, since: {} };
+
+function fpTicketNumber(value) {
+  var id = typeof value === "number" ? value : (typeof value === "string" && /^\d{1,9}$/.test(value) ? Number(value) : 0);
+  return Number.isInteger(id) && id > 0 ? id : 0;
+}
+
+function fpParseActivity(data) {
+  var out = {};
+  function put(value, state, thread) {
+    var id = fpTicketNumber(value);
+    if (!id || !Object.prototype.hasOwnProperty.call(FP_RUN_PRIORITY, state)) return;
+    if (out[id] && FP_RUN_PRIORITY[out[id].state] >= FP_RUN_PRIORITY[state]) return;
+    out[id] = { state: state, thread: thread };
+  }
+  data = data || {};
+  if (Array.isArray(data.states)) {
+    data.states.slice(0, 200).forEach(function (entry) {
+      if (!entry || typeof entry !== "object") return;
+      put(entry.ticket, entry.state, typeof entry.threadId === "string" ? entry.threadId.slice(0, 200) : null);
+    });
+  } else if (Array.isArray(data.tickets)) {
+    data.tickets.slice(0, 200).forEach(function (value) { put(value, "working", null); });
+  }
+  return out;
+}
+
+function fpRunLabel(state) {
+  var home = document.getElementById("fp-home");
+  var labels = {};
+  try { labels = JSON.parse((home && home.dataset.fpRunLabels) || "{}") || {}; } catch (error) { labels = {}; }
+  return labels[state] || FP_RUN_DEFAULT_LABELS[state] || "";
+}
+
+function fpPublishRun(next) {
+  var previous = fpRunStore.states;
+  var since = {};
+  Object.keys(next).forEach(function (id) {
+    var kept = previous[id] && previous[id].state === next[id].state && fpRunStore.since[id];
+    since[id] = kept || Date.now();
+  });
+  fpRunStore = { states: next, since: since };
+  window.dispatchEvent(new CustomEvent("fp:run-states", { detail: { states: next, previous: previous, since: since } }));
+}
+
+// Pille je Ticket in Arbeitsliste und Board-Karten; die Ticketauswahl hängt selbst an fp:run-states (fpMountChat).
+function fpRunPills() {
+  window.addEventListener("fp:run-states", function (event) {
+    var states = event.detail.states;
+    document.querySelectorAll("[data-fp-worklist-row], [data-fp-board-card]").forEach(function (node) {
+      var entry = states[Number(node.dataset.id)];
+      var pill = node.querySelector("[data-fp-run-pill]");
+      var line = node.querySelector(".fp-wl-line, .fp-card-line");
+      if (!entry) {
+        if (pill) pill.remove();
+        return;
+      }
+      if (!pill && line) {
+        pill = document.createElement("span");
+        line.insertBefore(pill, line.querySelector(".fp-wl-flag, .fp-card-project"));
+      }
+      if (!pill) return;
+      pill.className = "fp-run-pill fp-run-pill--" + entry.state;
+      pill.setAttribute("data-fp-run-pill", entry.state);
+      pill.textContent = fpRunLabel(entry.state);
+    });
+  });
+}
+
+// OP#1835: Abschnitt „Braucht dich“. Rückfragen kommen vom Server (Zeilen mit Formular); Befehlsfreigabe, Lauf fehlgeschlagen
+// und Eingabe nötig fügt dieser Code aus fp:run-states ein. Reihenfolge: Rang, dann Alter (älteste zuerst). Zähler in der
+// Ansichtsleiste und Präfix „(N) “ im Fenstertitel; beantwortete Rückfragen fallen nach kurzer Bestätigung heraus.
+function fpInbox(main) {
+  var box = main.querySelector("[data-fp-inbox]");
+  if (!box) return;
+  var holder = box.querySelector("[data-fp-inbox-rows]");
+  var total = box.querySelector("[data-fp-inbox-total]");
+  var empty = box.querySelector("[data-fp-inbox-empty]");
+  var counter = document.querySelector("[data-fp-inbox-count]");
+  var RANK = { approval: 0, question: 1, error: 2, input: 3 };
+
+  function rows() {
+    return Array.prototype.slice.call(holder.querySelectorAll("[data-fp-inbox-row]"));
+  }
+  function open(row) {
+    return !row.classList.contains("is-answered");
+  }
+
+  function info(id) {
+    var node = document.querySelector("[data-fp-worklist-row][data-id='" + id + "'], [data-fp-board-card][data-id='" + id + "']");
+    if (node) return node.dataset;
+    var pick = document.querySelector("[data-fp-chat-ticket='" + id + "']");
+    return pick ? { subject: pick.dataset.subject || "" } : {};
+  }
+  function ageLabel(since) {
+    var minutes = Math.max(0, Math.floor((Date.now() - since) / 60000));
+    if (minutes < 1) return "<1 min";
+    if (minutes < 60) return minutes + " min";
+    if (minutes < 1440) return Math.floor(minutes / 60) + " h";
+    return Math.floor(minutes / 1440) + " T";
+  }
+
+  function build(id, state, since) {
+    var known = info(id);
+    var li = document.createElement("li");
+    li.className = "fp-wl-row fp-inbox-row";
+    li.tabIndex = -1;
+    li.setAttribute("data-fp-inbox-row", "");
+    li.setAttribute("data-fp-inbox-run", state);
+    li.dataset.kind = state;
+    li.dataset.rank = String(RANK[state]);
+    li.dataset.since = String(Math.floor(since / 1000));
+    li.dataset.id = String(id);
+    li.dataset.subject = known.subject || "";
+    li.dataset.project = known.project || "";
+    li.dataset.status = known.status || "";
+    li.dataset.labels = known.labels || "[]";
+    li.dataset.url = known.url || "/work_packages/" + id;
+    var line = document.createElement("div");
+    line.className = "fp-wl-line";
+    var pill = document.createElement("span");
+    pill.className = "fp-run-pill fp-run-pill--" + state;
+    pill.setAttribute("data-fp-run-pill", state);
+    pill.textContent = fpRunLabel(state);
+    var link = document.createElement("a");
+    link.className = "fp-wl-id";
+    link.href = "/flightplan/work_packages/" + id;
+    link.setAttribute("data-turbo", "false");
+    link.textContent = "#" + id;
+    var title = document.createElement("span");
+    title.className = "fp-wl-title";
+    title.textContent = known.subject || "";
+    var age = document.createElement("span");
+    age.className = "fp-wl-age";
+    age.textContent = ageLabel(since);
+    line.appendChild(pill);
+    line.appendChild(link);
+    line.appendChild(title);
+    line.appendChild(age);
+    li.appendChild(line);
+    return li;
+  }
+
+  function order() {
+    var all = rows();
+    var sorted = all.slice().sort(function (a, b) {
+      return (Number(a.dataset.rank) - Number(b.dataset.rank)) || (Number(a.dataset.since) - Number(b.dataset.since)) ||
+        (Number(a.dataset.id) - Number(b.dataset.id));
+    });
+    if (sorted.every(function (row, index) { return row === all[index]; })) return;
+    var focused = document.activeElement;
+    sorted.forEach(function (row) { holder.appendChild(row); });
+    if (focused && focused !== document.body && typeof focused.focus === "function") focused.focus();
+  }
+
+  function recount() {
+    var count = rows().filter(open).length;
+    if (total) total.textContent = String(count);
+    if (empty) empty.hidden = rows().length > 0;
+    if (counter) {
+      counter.hidden = count === 0;
+      counter.textContent = (counter.dataset.template || "").replace("__N__", String(count));
+    }
+    document.title = (count ? "(" + count + ") " : "") + document.title.replace(/^\(\d+\)\s+/, "");
+  }
+
+  window.addEventListener("fp:run-states", function (event) {
+    var states = event.detail.states;
+    var since = event.detail.since;
+    rows().forEach(function (row) {
+      if (!row.hasAttribute("data-fp-inbox-run")) return;
+      var entry = states[Number(row.dataset.id)];
+      if (!entry || entry.state !== row.dataset.kind) row.remove();
+    });
+    Object.keys(states).forEach(function (key) {
+      var id = Number(key);
+      var state = states[key].state;
+      if (state === "working") return;
+      var present = rows().some(function (row) { return row.hasAttribute("data-fp-inbox-run") && Number(row.dataset.id) === id; });
+      if (!present) holder.appendChild(build(id, state, since[key] || Date.now()));
+    });
+    order();
+    recount();
+  });
+
+  window.addEventListener("fp:questions-changed", function () {
+    recount();
+    window.setTimeout(function () {
+      rows().forEach(function (row) { if (!open(row)) row.remove(); });
+      recount();
+    }, 2500);
+  });
+
+  function openRow(row) {
+    row.focus();
+    var labels = [];
+    try { labels = JSON.parse(row.dataset.labels || "[]") || []; } catch (error) { labels = []; }
+    window.dispatchEvent(new CustomEvent("fp:card-selected", {
+      detail: { id: Number(row.dataset.id), subject: row.dataset.subject, project: row.dataset.project,
+                status: row.dataset.status, labels: labels, url: row.dataset.url, reveal: true }
+    }));
+  }
+  function move(step, wrap) {
+    var all = rows().filter(open);
+    if (!all.length) return null;
+    var at = all.indexOf(document.activeElement && document.activeElement.closest ? document.activeElement.closest("[data-fp-inbox-row]") : null);
+    var index = at === -1 ? (step > 0 ? 0 : all.length - 1) : at + step;
+    if (wrap) index = (index + all.length) % all.length;
+    var next = all[Math.min(all.length - 1, Math.max(0, index))];
+    next.focus();
+    next.scrollIntoView({ block: "nearest" });
+    return next;
+  }
+
+  box.addEventListener("click", function (event) {
+    var row = event.target.closest("[data-fp-inbox-row]");
+    if (!row || event.target.closest("a, button, input, textarea, select, summary, details, form")) return;
+    openRow(row);
+  });
+
+  function showList() {
+    var views = main.querySelector("[data-fp-left-set='worklist']");
+    if (views && main.dataset.fpLeft !== "worklist") views.click();
+    var first = rows().filter(open)[0];
+    if (first) {
+      first.focus();
+      first.scrollIntoView({ block: "nearest" });
+    }
+  }
+  if (counter) counter.addEventListener("click", showList);
+
+  document.addEventListener("keydown", function (event) {
+    if (box.closest("[hidden]") || event.altKey || event.ctrlKey || event.metaKey) return;
+    var target = event.target;
+    var typing = target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+    if (typing) {
+      var home = target.closest ? target.closest("[data-fp-inbox-row]") : null;
+      if (event.key === "Escape" && home) {
+        target.blur();
+        home.focus();
+        event.preventDefault();
+      }
+      return;
+    }
+    var key = event.key;
+    if (key === "i") {
+      showList();
+      event.preventDefault();
+      return;
+    }
+    if (!target || !target.closest || !target.closest("[data-fp-inbox]")) return;
+    var row = target.closest("[data-fp-inbox-row]");
+    if (key === "j" || key === "ArrowDown") move(1, false);
+    else if (key === "k" || key === "ArrowUp") move(-1, false);
+    else if (key === "." ) {
+      var next = move(1, true);
+      if (next) openRow(next);
+    } else if (key === "o" && row) openRow(row);
+    else if (key === "Enter" && row && target === row) openRow(row);
+    else if (/^[1-9]$/.test(key) && row) {
+      var option = row.querySelectorAll(".fp-q-option")[Number(key) - 1];
+      if (!option || option.disabled) return;
+      option.click();
+    } else return;
+    event.preventDefault();
+  });
+
+  rows().forEach(function (row) {
+    row.querySelectorAll(".fp-q-option").forEach(function (option, index) {
+      if (index > 8) return;
+      var hint = document.createElement("kbd");
+      hint.className = "fp-inbox-key";
+      hint.textContent = String(index + 1);
+      option.insertBefore(hint, option.firstChild);
+    });
+  });
+  recount();
+}
+
 // Chat iframe of the workplace (#fp-workplace) and of the home screen (#fp-home-chat, OP#1671).
 function fpMountChat(root, frame) {
   var origin = "http://localhost:8092";
@@ -559,7 +843,7 @@ function fpMountChat(root, frame) {
       return;
     }
     if (data.type === "fp:activity" && bar) {
-      markWorking(data.tickets);
+      fpPublishRun(fpParseActivity(data));
       return;
     }
     if (data.type === "fp:thread" && bar) {
@@ -812,34 +1096,34 @@ function fpMountChat(root, frame) {
     });
   }
 
-  // OP#1802: T3 meldet per fp:activity, an welchen Tickets gerade ein Agent arbeitet (alle Threads, nicht nur der
-  // offene). Die Zeile zeigt dann „Agent arbeitet“ statt des OpenProject-Status. Der Status in OpenProject bleibt
-  // unberührt; endet die Arbeit, lädt die Zeile ihn frisch nach.
-  var working = {};
-  function markWorking(list) {
-    var next = {};
-    (Array.isArray(list) ? list : []).slice(0, 200).forEach(function (value) {
-      var id = Number(value);
-      if (Number.isInteger(id) && id > 0) next[id] = true;
-    });
-    var label = bar.dataset.workingLabel || "Agent arbeitet";
+  // OP#1802, OP#1835: T3 meldet per fp:activity den Laufzustand je Ticket (alle Threads, nicht nur der offene). Die Zeile
+  // zeigt dann „Agent arbeitet“, „Freigabe nötig“, „Eingabe nötig“ oder „Lauf fehlgeschlagen“ statt des OpenProject-Status.
+  // Der Status in OpenProject bleibt unberührt; fällt das Ticket aus der Meldung, lädt die Zeile ihn frisch nach.
+  var marked = {};
+  function markRunStates(states) {
     bar.querySelectorAll("[data-fp-chat-ticket]").forEach(function (node) {
       var id = Number(node.dataset.fpChatTicket);
+      var entry = states[id];
       var pill = node.querySelector(".fp-chat-ticket-working-pill");
-      if (next[id] && !pill) {
+      if (entry && !pill) {
         pill = document.createElement("span");
-        pill.className = "fp-chat-ticket-working-pill";
-        pill.textContent = label;
         node.appendChild(pill);
         node.classList.add("fp-chat-ticket-working");
-      } else if (!next[id] && pill) {
+      } else if (!entry && pill) {
         pill.remove();
         node.classList.remove("fp-chat-ticket-working");
+        return;
+      }
+      if (pill) {
+        pill.className = "fp-chat-ticket-working-pill fp-run-pill fp-run-pill--" + entry.state;
+        pill.setAttribute("data-fp-run-pill", entry.state);
+        pill.textContent = fpRunLabel(entry.state);
       }
     });
-    Object.keys(working).forEach(function (id) { if (!next[id]) refreshStatus(Number(id)); });
-    working = next;
+    Object.keys(marked).forEach(function (id) { if (!states[id]) refreshStatus(Number(id)); });
+    marked = states;
   }
+  window.addEventListener("fp:run-states", function (event) { markRunStates(event.detail.states); });
 
   function refreshStatus(id) {
     fetch("/flightplan/chat/context?wp=" + encodeURIComponent(id), {
@@ -1257,6 +1541,7 @@ function fpWorklist(main) {
       }
       return;
     }
+    if (target && target.closest && target.closest("[data-fp-inbox]")) return;
     var row = target && target.closest ? target.closest("[data-fp-worklist-row]") : null;
     var key = event.key;
     if (key === "j" || key === "ArrowDown") move(1);
@@ -1291,7 +1576,11 @@ function fpWorklist(main) {
   var split = document.querySelector("#fp-home[data-fp-chat='1']");
   if (split) fpHomeSplit(split);
   var main = document.querySelector("#fp-home[data-fp-chat='1'] > .fp-home-main");
-  if (main) fpWorklist(main);
+  if (main) {
+    fpWorklist(main);
+    fpInbox(main);
+  }
+  fpRunPills();
 })();
 
 (function () {
