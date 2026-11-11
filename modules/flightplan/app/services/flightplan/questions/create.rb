@@ -3,20 +3,28 @@
 module Flightplan
   module Questions
     class Create
-      def self.call(user:, work_package:, question:, context: nil, options: nil)
-        new(user:, work_package:, question:, context:, options:).call
+      # OP#1842: kind, recommended, reversible und consequence sind optional und nullbar (Vertrag Phase 3, Abschnitt 4).
+      def self.call(user:, work_package:, question:, context: nil, options: nil, kind: nil, recommended: nil,
+                    reversible: nil, consequence: nil)
+        new(user:, work_package:, question:, context:, options:, kind:, recommended:, reversible:, consequence:).call
       end
 
-      def initialize(user:, work_package:, question:, context:, options:)
+      def initialize(user:, work_package:, question:, context:, options:, kind: nil, recommended: nil, reversible: nil,
+                     consequence: nil)
         @user = user
         @work_package = work_package
         @question = question.to_s
         @context = context
         @options = Array(options).map(&:to_s)
+        @kind = kind.to_s.strip.presence
+        @recommended = recommended.to_s.strip.presence
+        @reversible = reversible
+        @consequence = consequence.to_s.strip.presence
       end
 
       def call
         raise Error, "Frage fehlt" if @question.blank?
+        validate_structure!
         raise Error, "Paket nicht sichtbar" unless visible?
 
         Question.transaction do
@@ -28,6 +36,10 @@ module Flightplan
             question: @question,
             context: @context.presence,
             options: @options,
+            kind: @kind,
+            recommended_option: @recommended,
+            reversible: parsed_reversible,
+            consequence: @consequence,
             status: "open",
             previous_status_id: previous_id
           )
@@ -37,6 +49,28 @@ module Flightplan
       end
 
       private
+
+      # 422 statt Datenbankfehler: unbekannte Art, Empfehlung außerhalb der Optionen, zu lange Folge, unlesbarer Wahrheitswert.
+      def validate_structure!
+        raise Error, "Art unbekannt (erlaubt: #{Question::KINDS.join(', ')})" if @kind && Question::KINDS.exclude?(@kind)
+        if @recommended && @options.exclude?(@recommended)
+          raise Error, "Empfehlung ist keine der Optionen"
+        end
+        if @consequence && @consequence.length > Question::CONSEQUENCE_MAX
+          raise Error, "Folge ist länger als #{Question::CONSEQUENCE_MAX} Zeichen"
+        end
+
+        parsed_reversible
+      end
+
+      def parsed_reversible
+        case @reversible
+        when nil, "" then nil
+        when true, "true" then true
+        when false, "false" then false
+        else raise Error, "umkehrbar muss wahr oder falsch sein"
+        end
+      end
 
       def visible?
         @user.admin? || @work_package.visible?(@user)

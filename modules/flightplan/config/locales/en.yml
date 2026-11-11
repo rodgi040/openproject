@@ -55,6 +55,31 @@ en:
       decided_short:
         confirmed: "Assumption confirmed."
         rejected: "Assumption rejected."
+    requests:
+      kinds:
+        entscheidung: "Decision"
+        freigabe: "Approval"
+        zugang: "Access"
+        abnahme: "Acceptance"
+      recommended: "recommended"
+      irreversible: "not reversible"
+      consequence: "Consequence"
+      enter_hint: "Enter takes the recommendation"
+      in_chat: "answer in the chat"
+      command: "Command"
+      reason: "Reason"
+      approve: "approve"
+      decline: "decline"
+      free_text: "Free text"
+      send_text: "Send free text"
+      sending: "Sending …"
+      answered: "Answered."
+      gone: "already done or changed"
+      failed: "not delivered, check in the chat"
+      too_long: "Command too long to display, please answer in the chat"
+    shadow:
+      title: "Shadow measurement"
+      summary: "Shadow: %{total} cases, %{matched} as recommended; the rule would have decided %{would_auto} times, %{wrong} of them wrong"
     forward:
       pending: "The agent has not received the answer yet"
       no_thread: "No chat for this ticket"

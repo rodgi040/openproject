@@ -11,6 +11,11 @@ module API
               requires :question, type: String
               optional :context, type: String
               optional :options, type: Array[String]
+              # OP#1842: Rückfrage mit Struktur; die Prüfung steckt in Questions::Create (422).
+              optional :kind, type: String
+              optional :recommended_option, type: String
+              optional :reversible
+              optional :consequence, type: String
             end
             post do
               work_package = visible_work_package(params[:work_package_id])
@@ -19,7 +24,11 @@ module API
                 work_package:,
                 question: params[:question],
                 context: params[:context],
-                options: params[:options]
+                options: params[:options],
+                kind: params[:kind],
+                recommended: params[:recommended_option],
+                reversible: params[:reversible],
+                consequence: params[:consequence]
               )
               status 201
               ::Flightplan::QuestionPayload.dump(record)

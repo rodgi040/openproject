@@ -618,6 +618,118 @@ function fpRunPills() {
   });
 }
 
+// FP-REQUESTS-BEGIN
+// OP#1842: Anfragen aus dem Chat (Vertrag Phase 3, Abschnitte 1 bis 3). Reine Funktionen ohne DOM und Netz; fpInbox zeigt sie an.
+// Alles aus dem Rahmen ist untrusted: jedes Feld wird geprüft, Längen werden begrenzt, unbekannte kind fallen weg.
+var FP_REQ_MAX = { items: 20, options: 20, id: 200, label: 500, description: 2000, text: 4000, detail: 20000, reason: 2000, tool: 200 };
+
+function fpReqString(value, max, required) {
+  if (typeof value !== "string") return required ? null : "";
+  if (required && !value.trim()) return null;
+  return value.length > max ? value.slice(0, max) : value;
+}
+
+// fp:requests {ticket, threadId, items[]} -> {ticket, threadId, items[]} oder null. `answerable` ist nur dann wahr, wenn der
+// Rahmen es nicht auf false setzt, die Frage nicht multiSelect ist und der Befehlstext nicht gekürzt werden musste.
+function fpParseRequests(data) {
+  data = data || {};
+  var ticket = fpTicketNumber(data.ticket);
+  if (!ticket || !Array.isArray(data.items)) return null;
+  var threadId = typeof data.threadId === "string" && data.threadId && data.threadId.length <= FP_REQ_MAX.id ? data.threadId : null;
+  var items = [];
+  data.items.slice(0, FP_REQ_MAX.items).forEach(function (raw) {
+    if (!raw || typeof raw !== "object") return;
+    var requestId = raw.requestId;
+    if (typeof requestId !== "string" || !requestId.trim() || requestId.length > FP_REQ_MAX.id) return;
+    var item = { requestId: requestId, kind: raw.kind, createdAt: fpReqString(raw.createdAt, 40, false), answerable: raw.answerable !== false };
+    if (raw.kind === "question") {
+      var q = raw.question;
+      if (!q || typeof q !== "object" || !Array.isArray(q.options)) return;
+      var text = fpReqString(q.text, FP_REQ_MAX.text, true);
+      if (text === null) return;
+      var options = [];
+      q.options.slice(0, FP_REQ_MAX.options).forEach(function (option) {
+        if (!option || typeof option !== "object" || typeof option.label !== "string" || !option.label.trim() ||
+            option.label.length > FP_REQ_MAX.label) return;
+        options.push({
+          label: option.label,
+          description: typeof option.description === "string" ? option.description.slice(0, FP_REQ_MAX.description) : null,
+          recommended: option.recommended === true
+        });
+      });
+      if (q.options.length > FP_REQ_MAX.options) item.answerable = false;
+      if (q.multiSelect === true) item.answerable = false;
+      item.question = { text: text, options: options, multiSelect: q.multiSelect === true };
+    } else if (raw.kind === "approval") {
+      var a = raw.approval;
+      if (!a || typeof a !== "object" || typeof a.detail !== "string" || !a.detail.trim()) return;
+      // Ein gekürzter Befehl darf nie freigegeben werden: dann nur der Hinweis „im Chat beantworten“.
+      if (a.detail.length > FP_REQ_MAX.detail) item.answerable = false;
+      item.approval = {
+        detail: a.detail.slice(0, FP_REQ_MAX.detail),
+        reason: typeof a.reason === "string" && a.reason ? a.reason.slice(0, FP_REQ_MAX.reason) : null,
+        tool: typeof a.tool === "string" && a.tool ? a.tool.slice(0, FP_REQ_MAX.tool) : null
+      };
+    } else {
+      return;
+    }
+    items.push(item);
+  });
+  return { ticket: ticket, threadId: threadId, items: items };
+}
+
+// Antwort aus der Inbox als fp:respond. input: {optionLabel} | {text} | {decision}. Null bei allem, was nicht genau passt:
+// kein Thread, nicht beantwortbar, Option nicht in der Liste, Freigabe anders als accept/decline, leerer Text.
+function fpRespondMessage(parsed, item, input) {
+  if (!parsed || !parsed.threadId || !item || !item.answerable || !input) return null;
+  var base = { type: "fp:respond", ticket: parsed.ticket, threadId: parsed.threadId, requestId: item.requestId, kind: item.kind };
+  if (item.kind === "approval") {
+    if (input.decision !== "accept" && input.decision !== "decline") return null;
+    base.decision = input.decision;
+    // Nachtrag 1: der angezeigte Befehlstext, unverändert; der Rahmen gibt nur frei, wenn er noch dem aktuellen entspricht.
+    base.detail = item.approval.detail;
+    return base;
+  }
+  if (item.kind !== "question" || !item.question) return null;
+  if (typeof input.optionLabel === "string") {
+    var known = item.question.options.some(function (option) { return option.label === input.optionLabel; });
+    if (!known) return null;
+    base.optionLabel = input.optionLabel;
+    return base;
+  }
+  if (typeof input.text === "string" && input.text.trim()) {
+    base.text = input.text.slice(0, FP_REQ_MAX.text);
+    return base;
+  }
+  return null;
+}
+
+// fp:responded -> {ticket, requestId, result} oder null.
+function fpParseResponded(data) {
+  data = data || {};
+  var ticket = fpTicketNumber(data.ticket);
+  var requestId = typeof data.requestId === "string" && data.requestId && data.requestId.length <= FP_REQ_MAX.id ? data.requestId : null;
+  if (!ticket || !requestId || (data.result !== "ok" && data.result !== "gone" && data.result !== "error")) return null;
+  return { ticket: ticket, requestId: requestId, result: data.result };
+}
+
+// Körper für POST /flightplan/shadow: nur wenn der Mensch eine Option wählte und die Frage eine empfohlene hatte.
+function fpShadowBody(parsed, item, optionLabel) {
+  if (!parsed || !item || item.kind !== "question" || !item.question || typeof optionLabel !== "string") return null;
+  var recommended = item.question.options.filter(function (option) { return option.recommended; })[0];
+  if (!recommended) return null;
+  return { ticket: String(parsed.ticket), request_id: item.requestId, recommended: recommended.label, chosen: optionLabel };
+}
+
+// Taste Enter auf einer Rückfrage-Zeile: nimmt die empfohlene Option, außer reversible ist falsch oder es gibt keine
+// (gültige) Empfehlung. reversible: "true" | "false" | "" (unbekannt). Gibt die Option oder null zurück.
+function fpEnterOption(recommended, reversible, options) {
+  if (typeof recommended !== "string" || !recommended) return null;
+  if (reversible === "false" || reversible === false) return null;
+  return (options || []).indexOf(recommended) === -1 ? null : recommended;
+}
+// FP-REQUESTS-END
+
 // OP#1835: Abschnitt „Braucht dich“. Rückfragen kommen vom Server (Zeilen mit Formular); Befehlsfreigabe, Lauf fehlgeschlagen
 // und Eingabe nötig fügt dieser Code aus fp:run-states ein. Reihenfolge: Rang, dann Alter (älteste zuerst). Zähler in der
 // Ansichtsleiste und Präfix „(N) “ im Fenstertitel; beantwortete Rückfragen fallen nach kurzer Bestätigung heraus.
@@ -689,6 +801,17 @@ function fpInbox(main) {
     line.appendChild(title);
     line.appendChild(age);
     li.appendChild(line);
+    if (state === "approval" || state === "input") {
+      // OP#1842: bis fp:requests ankommt (oder wenn es leer bleibt) gilt der Weg „im Chat beantworten“.
+      var details = document.createElement("div");
+      details.className = "fp-req";
+      details.setAttribute("data-fp-requests", "");
+      var wait = document.createElement("p");
+      wait.className = "fp-req-hint";
+      wait.textContent = reqLabel("in_chat");
+      details.appendChild(wait);
+      li.appendChild(details);
+    }
     return li;
   }
 
@@ -717,6 +840,204 @@ function fpInbox(main) {
     document.title = (count ? "(" + count + ") " : "") + document.title.replace(/^\(\d+\)\s+/, "");
   }
 
+  // OP#1842: Anfragen aus dem Chat in den Zeilen „Freigabe nötig“ und „Eingabe nötig“. Der Rahmen liefert die Details auf
+  // fp:requests-get (einmal je Zeile, die neu erscheint); Antworten gehen als fp:respond, das Ergebnis kommt als fp:responded.
+  // Aller Text aus dem Rahmen wird mit textContent gesetzt.
+  var requests = {};
+  var shadows = {};
+  var timers = {};
+  var labels = null;
+  function reqLabel(key) {
+    if (!labels) {
+      var home = document.getElementById("fp-home");
+      try { labels = JSON.parse((home && home.dataset.fpRequestLabels) || "{}") || {}; } catch (error) { labels = {}; }
+    }
+    var fallback = { in_chat: "im Chat beantworten", command: "Befehl", reason: "Grund", approve: "freigeben", decline: "ablehnen",
+                     free_text: "Freitext", send_text: "Freitext senden", sending: "Wird gesendet …", answered: "Beantwortet.",
+                     gone: "schon erledigt oder geändert", failed: "nicht zugestellt, im Chat prüfen", too_long: "Befehl zu lang für die Anzeige, bitte im Chat beantworten",
+                     recommended: "empfohlen" };
+    return labels[key] || fallback[key] || "";
+  }
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined && text !== null) node.textContent = text;
+    return node;
+  }
+  function runRow(ticket) {
+    return rows().filter(function (row) { return row.hasAttribute("data-fp-inbox-run") && Number(row.dataset.id) === ticket; })[0] || null;
+  }
+  function askRequests(ticket) {
+    delete requests[ticket];
+    fpPostToFrame({ type: "fp:requests-get", ticket: ticket });
+  }
+  function reqNote(node, text, error) {
+    var note = node.querySelector("[data-fp-req-note]");
+    if (!note) {
+      note = el("p", "fp-q-note");
+      note.setAttribute("data-fp-req-note", "");
+      node.appendChild(note);
+    }
+    note.textContent = text || "";
+    note.classList.toggle("is-error", !!error);
+    note.setAttribute("role", error ? "alert" : "status");
+    note.hidden = !text;
+  }
+  function itemButtons(node, disabled) {
+    node.querySelectorAll("button, textarea").forEach(function (control) { control.disabled = disabled; });
+  }
+  function renderItem(item) {
+    var node = el("div", "fp-req-item");
+    node.setAttribute("data-fp-request", item.requestId);
+    if (item.kind === "approval") {
+      node.setAttribute("data-fp-req-kind", "approval");
+      node.appendChild(el("p", "fp-q-text", reqLabel("command") + (item.approval.tool ? " (" + item.approval.tool + ")" : "")));
+      node.appendChild(el("pre", "fp-req-command", item.approval.detail));
+      if (item.approval.reason) node.appendChild(el("p", "fp-req-reason", reqLabel("reason") + ": " + item.approval.reason));
+      if (!item.answerable) {
+        node.appendChild(el("p", "fp-req-hint", reqLabel("in_chat")));
+        return node;
+      }
+      // Keine Tastenkürzel und keine Hervorhebung: zwei gleich gewichtete Knöpfe.
+      var buttons = el("div", "fp-q-actions");
+      [["accept", "approve"], ["decline", "decline"]].forEach(function (pair) {
+        var button = el("button", "fp-req-decide", reqLabel(pair[1]));
+        button.type = "button";
+        button.setAttribute("data-fp-req-decision", pair[0]);
+        buttons.appendChild(button);
+      });
+      node.appendChild(buttons);
+      return node;
+    }
+    node.setAttribute("data-fp-req-kind", "question");
+    node.appendChild(el("p", "fp-q-text", item.question.text));
+    if (!item.answerable) {
+      node.appendChild(el("p", "fp-req-hint", reqLabel("in_chat")));
+      return node;
+    }
+    var actions = el("div", "fp-q-actions");
+    item.question.options.forEach(function (option, index) {
+      var button = el("button", "fp-q-option fp-req-option" + (option.recommended ? " is-recommended" : ""));
+      button.type = "button";
+      button.setAttribute("data-fp-req-option", option.label);
+      if (option.description) button.title = option.description;
+      if (index < 9) {
+        var hint = el("kbd", "fp-inbox-key", String(index + 1));
+        button.appendChild(hint);
+      }
+      button.appendChild(document.createTextNode(option.label));
+      if (option.recommended) button.appendChild(el("span", "fp-q-rec", " (" + reqLabel("recommended") + ")"));
+      actions.appendChild(button);
+    });
+    node.appendChild(actions);
+    var area = document.createElement("textarea");
+    area.className = "fp-q-input";
+    area.rows = 2;
+    area.maxLength = FP_REQ_MAX.text;
+    area.setAttribute("aria-label", reqLabel("free_text"));
+    area.placeholder = reqLabel("free_text");
+    node.appendChild(area);
+    var send = el("button", "fp-q-send", reqLabel("send_text"));
+    send.type = "button";
+    send.setAttribute("data-fp-req-send", "");
+    node.appendChild(send);
+    return node;
+  }
+  function renderRequests(parsed) {
+    var row = parsed && runRow(parsed.ticket);
+    var holderNode = row && row.querySelector("[data-fp-requests]");
+    if (!holderNode) return;
+    requests[parsed.ticket] = parsed;
+    while (holderNode.firstChild) holderNode.removeChild(holderNode.firstChild);
+    if (!parsed.items.length || !parsed.threadId) {
+      holderNode.appendChild(el("p", "fp-req-hint", reqLabel("in_chat")));
+      return;
+    }
+    parsed.items.forEach(function (item) { holderNode.appendChild(renderItem(item)); });
+  }
+  window.addEventListener("fp:requests-in", function (event) { renderRequests(event.detail); });
+
+  function sendRespond(row, node, input) {
+    var ticket = Number(row.dataset.id);
+    var parsed = requests[ticket];
+    var item = parsed && parsed.items.filter(function (entry) { return entry.requestId === node.getAttribute("data-fp-request"); })[0];
+    var message = fpRespondMessage(parsed, item, input);
+    if (!message) {
+      reqNote(node, reqLabel("failed"), true);
+      return;
+    }
+    itemButtons(node, true);
+    reqNote(node, reqLabel("sending"), false);
+    var body = typeof input.optionLabel === "string" ? fpShadowBody(parsed, item, input.optionLabel) : null;
+    if (body) shadows[item.requestId] = body;
+    window.clearTimeout(timers[item.requestId]);
+    timers[item.requestId] = window.setTimeout(function () {
+      delete shadows[item.requestId];
+      itemButtons(node, item.kind === "approval");
+      reqNote(node, reqLabel("failed"), true);
+    }, 15000);
+    fpPostToFrame(message);
+  }
+  function postShadow(body) {
+    if (typeof fetch !== "function") return;
+    var meta = document.querySelector("meta[name='csrf-token']");
+    fetch("/flightplan/shadow", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Accept": "application/json", "X-CSRF-Token": meta ? meta.content : "", "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(body).toString()
+    }).catch(function () {});
+  }
+  window.addEventListener("fp:responded-in", function (event) {
+    var done = event.detail;
+    var row = done && runRow(done.ticket);
+    if (!row) return;
+    var node = Array.prototype.slice.call(row.querySelectorAll("[data-fp-request]"))
+      .filter(function (entry) { return entry.getAttribute("data-fp-request") === done.requestId; })[0];
+    window.clearTimeout(timers[done.requestId]);
+    delete timers[done.requestId];
+    var body = shadows[done.requestId];
+    delete shadows[done.requestId];
+    if (!node) return;
+    if (done.result === "error") {
+      // „Nicht bestätigt“: eine Freigabe bleibt gesperrt (sie könnte angekommen sein), eine Frage darf neu gesendet werden.
+      itemButtons(node, node.getAttribute("data-fp-req-kind") === "approval");
+      reqNote(node, reqLabel("failed"), true);
+      return;
+    }
+    if (done.result === "ok" && body) postShadow(body);
+    node.classList.add("is-answered");
+    node.querySelectorAll(".fp-q-actions, textarea, .fp-q-send").forEach(function (part) { part.remove(); });
+    reqNote(node, reqLabel(done.result === "ok" ? "answered" : "gone"), false);
+    if (!row.querySelector(".fp-req-item:not(.is-answered)")) {
+      row.classList.add("is-answered");
+      window.dispatchEvent(new CustomEvent("fp:inbox-recount"));
+    }
+  });
+  box.addEventListener("click", function (event) {
+    var target = event.target.closest && event.target.closest("[data-fp-req-option], [data-fp-req-decision], [data-fp-req-send]");
+    var row = target && target.closest("[data-fp-inbox-run]");
+    var node = target && target.closest("[data-fp-request]");
+    if (!row || !node) return;
+    event.preventDefault();
+    if (target.hasAttribute("data-fp-req-option")) sendRespond(row, node, { optionLabel: target.getAttribute("data-fp-req-option") });
+    else if (target.hasAttribute("data-fp-req-decision")) sendRespond(row, node, { decision: target.getAttribute("data-fp-req-decision") });
+    else {
+      var area = node.querySelector("textarea");
+      sendRespond(row, node, { text: area ? area.value : "" });
+    }
+  });
+
+  // Taste Enter auf einer Rückfrage-Zeile mit Empfehlung (fp-op ask --recommend): nimmt die empfohlene Option, außer die
+  // Rückfrage ist als nicht umkehrbar markiert. Sonst bleibt es beim Öffnen des Tickets.
+  function enterButton(row) {
+    if (row.dataset.kind !== "question" || row.hasAttribute("data-fp-inbox-run")) return null;
+    var buttons = Array.prototype.slice.call(row.querySelectorAll("button.fp-q-option[name='option']"));
+    var pick = fpEnterOption(row.dataset.fpRecommended, row.dataset.fpReversible || "", buttons.map(function (button) { return button.value; }));
+    var match = pick === null ? null : buttons.filter(function (button) { return button.value === pick; })[0];
+    return match && !match.disabled ? match : null;
+  }
+
   window.addEventListener("fp:run-states", function (event) {
     var states = event.detail.states;
     var since = event.detail.since;
@@ -730,7 +1051,10 @@ function fpInbox(main) {
       var state = states[key].state;
       if (state === "working") return;
       var present = rows().some(function (row) { return row.hasAttribute("data-fp-inbox-run") && Number(row.dataset.id) === id; });
-      if (!present) holder.appendChild(build(id, state, since[key] || Date.now()));
+      if (!present) {
+        holder.appendChild(build(id, state, since[key] || Date.now()));
+        if (state === "approval" || state === "input") askRequests(id);
+      }
     });
     order();
     recount();
@@ -865,7 +1189,12 @@ function fpInbox(main) {
     else if (key === "s" && row) {
       if (!event.repeat && fpStartable(row)) fpStartTicket(row);
     }
-    else if (key === "Enter" && row && target === row) openRow(row);
+    else if (key === "Enter" && row && target === row) {
+      var preferred = enterButton(row);
+      if (preferred) {
+        if (!event.repeat) preferred.click();
+      } else openRow(row);
+    }
     else if (/^[1-9]$/.test(key) && row) {
       var option = row.querySelectorAll(".fp-q-option")[Number(key) - 1];
       if (!option || option.disabled) return;
@@ -1055,6 +1384,16 @@ function fpMountChat(root, frame) {
       finishStart(data);
       return;
     }
+    if (data.type === "fp:requests" && bar) {
+      var requested = fpParseRequests(data);
+      if (requested) window.dispatchEvent(new CustomEvent("fp:requests-in", { detail: requested }));
+      return;
+    }
+    if (data.type === "fp:responded" && bar) {
+      var responded = fpParseResponded(data);
+      if (responded) window.dispatchEvent(new CustomEvent("fp:responded-in", { detail: responded }));
+      return;
+    }
     if (data.type === "fp:forwarded") {
       fpShowForwarded(fpParseForwarded(data));
       return;
@@ -1141,7 +1480,7 @@ function fpMountChat(root, frame) {
 
   // OP#1839/OP#1840: Antwort aus dem Dashboard, Entscheidung zu einer Annahme und Hintergrundstart gehen als Nachricht an den
   // Rahmen. Nur diese drei Typen; alle Felder hat der Absender im Dashboard schon aus Server-Antworten gebaut.
-  var FRAME_TYPES = ["fp:answered", "fp:assumption", "fp:start"];
+  var FRAME_TYPES = ["fp:answered", "fp:assumption", "fp:start", "fp:requests-get", "fp:respond"];
   window.addEventListener("fp:frame-post", function (event) {
     var message = event.detail;
     if (message && FRAME_TYPES.indexOf(message.type) !== -1) post(message);

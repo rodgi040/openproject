@@ -50,6 +50,8 @@ module Flightplan
           )
           comment!
         end
+        # OP#1843: nur Messung, nach der Antwort des Menschen; ändert nichts an der Antwort.
+        Flightplan::Shadow.record_ask(@question)
         @question.status_restored = restore_status!
         @question
       end
