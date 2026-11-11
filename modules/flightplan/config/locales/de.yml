@@ -84,6 +84,20 @@ de:
     forward:
       pending: "Der Agent hat die Antwort noch nicht erhalten"
       no_thread: "Kein Chat zu diesem Ticket"
+    denials:
+      label: "%{count} gesperrt"
+      seen: "Gesehen"
+      categories:
+        git-push-main: "Push auf main/master"
+        git-push-force: "erzwungener Push"
+        sudo: "sudo"
+        systemctl: "Dienste ändern"
+        docker: "Docker"
+        rm-ausserhalb: "Löschen außerhalb des Arbeitsordners"
+        schreibziel-geschuetzt: "geschützter Schreibort"
+        fp-op-doctor: "fp-op doctor"
+        zu-lang: "Befehl zu lang"
+        pruefung-fehlgeschlagen: "Prüfung fehlgeschlagen"
     start:
       button: "Im Hintergrund starten"
       title: "Agent im Hintergrund starten (s)"

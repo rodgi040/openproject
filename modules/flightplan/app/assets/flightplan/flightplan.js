@@ -573,6 +573,107 @@ function fpParseActivity(data) {
   return out;
 }
 
+// FP-DENIALS-BEGIN
+// OP#1890: Sperren-Zähler. Das optionale Feld `denials` von fp:activity (T3 ab OP#1890):
+//   denials: { "<ticket>": { count: n, protected: true|false, maxInThread: n, lastCategory: "<kategorie>" } }
+// Fehlt das Feld (älterer T3-Server) oder ist es kaputt, gilt es wie bisher als „keine Sperren“; fp:activity ohne `denials`
+// verhält sich genau wie vorher. Alles aus dem Rahmen ist untrusted: Ticketnummer, Zahlen und Kategorie werden geprüft.
+// Grenze: Solange t3-fp als root läuft, kann ein Agent die Protokolldatei flightplan-denials.jsonl verändern. Die Anzeige ist
+// ein Hinweis, kein Sicherheitsbeleg (OP#1845).
+var FP_DENIAL_ATTENTION_COUNT = 3;
+var FP_DENIAL_MAX_COUNT = 99999;
+var FP_DENIAL_DEFAULT_LABELS = {
+  "git-push-main": "Push auf main/master", "git-push-force": "erzwungener Push", "sudo": "sudo", "systemctl": "Dienste ändern",
+  "docker": "Docker", "rm-ausserhalb": "Löschen außerhalb des Arbeitsordners", "schreibziel-geschuetzt": "geschützter Schreibort",
+  "fp-op-doctor": "fp-op doctor", "zu-lang": "Befehl zu lang", "pruefung-fehlgeschlagen": "Prüfung fehlgeschlagen"
+};
+
+function fpParseDenials(data) {
+  var out = {};
+  var raw = data && typeof data === "object" ? data.denials : null;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  Object.keys(raw).slice(0, 200).forEach(function (key) {
+    var id = fpTicketNumber(key);
+    var entry = raw[key];
+    if (!id || !entry || typeof entry !== "object") return;
+    var count = entry.count;
+    if (!Number.isInteger(count) || count < 1) return;
+    var inThread = entry.maxInThread;
+    var category = typeof entry.lastCategory === "string" && /^[a-z0-9-]{1,40}$/.test(entry.lastCategory) ? entry.lastCategory : "";
+    out[id] = {
+      count: Math.min(count, FP_DENIAL_MAX_COUNT),
+      protected: entry.protected === true,
+      maxInThread: Number.isInteger(inThread) && inThread >= 1 ? Math.min(inThread, FP_DENIAL_MAX_COUNT) : 1,
+      category: category
+    };
+  });
+  return out;
+}
+
+// Rang 1 in „Braucht dich“ nur bei Treffer auf ein Schutzziel oder ab drei Ablehnungen in einem Thread; sonst nur die Pille.
+function fpDenialAttention(entry) {
+  return !!entry && (entry.protected === true || entry.maxInThread >= FP_DENIAL_ATTENTION_COUNT);
+}
+
+// Text der Pille und der Inbox-Zeile: nennt Zahl und Kategorie, nie einen Befehl. `template` enthält __N__.
+function fpDenialPillText(entry, template) {
+  return String(template || "__N__ gesperrt").replace("__N__", String(entry.count));
+}
+
+function fpDenialCategoryLabel(category, labels) {
+  var own = labels && Object.prototype.hasOwnProperty.call(labels, category) && typeof labels[category] === "string" ? labels[category] : "";
+  return own || (Object.prototype.hasOwnProperty.call(FP_DENIAL_DEFAULT_LABELS, category) ? FP_DENIAL_DEFAULT_LABELS[category] : "Sperrliste");
+}
+
+// Eine bestätigte Zeile bleibt weg, bis neue Sperren dazukommen (seen = Zahl beim Bestätigen).
+function fpDenialRowVisible(entry, seen) {
+  return fpDenialAttention(entry) && entry.count > (Number(seen) || 0);
+}
+
+// Sinkt die gemeldete Zahl unter die gemerkte (Protokoll gekürzt, gelöscht oder verändert), gilt der Merker nicht mehr: 0.
+function fpDenialSeenFor(entry, seen) {
+  var value = Number(seen) || 0;
+  return entry && entry.count < value ? 0 : value;
+}
+// FP-DENIALS-END
+
+var fpDenialStore = {};
+
+function fpPublishDenials(next) {
+  var previous = fpDenialStore;
+  fpDenialStore = next;
+  window.dispatchEvent(new CustomEvent("fp:denials", { detail: { denials: next, previous: previous } }));
+}
+
+function fpDenialTemplate() {
+  var home = document.getElementById("fp-home");
+  return (home && home.dataset.fpDenialLabel) || "__N__ gesperrt";
+}
+
+// Ruhige gelbe Pille „n gesperrt“ neben der Laufpille; kein Alarm, kein Ton.
+function fpDenialPills() {
+  window.addEventListener("fp:denials", function (event) {
+    var denials = event.detail.denials;
+    document.querySelectorAll("[data-fp-worklist-row], [data-fp-board-card]").forEach(function (node) {
+      var entry = denials[Number(node.dataset.id)];
+      var pill = node.querySelector("[data-fp-denial-pill]");
+      var line = node.querySelector(".fp-wl-line, .fp-card-line");
+      if (!entry) {
+        if (pill) pill.remove();
+        return;
+      }
+      if (!pill && line) {
+        pill = document.createElement("span");
+        line.insertBefore(pill, line.querySelector(".fp-wl-flag, .fp-card-project"));
+      }
+      if (!pill) return;
+      pill.className = "fp-run-pill fp-run-pill--denied";
+      pill.setAttribute("data-fp-denial-pill", "");
+      pill.textContent = fpDenialPillText(entry, fpDenialTemplate());
+    });
+  });
+}
+
 function fpRunLabel(state) {
   var home = document.getElementById("fp-home");
   var labels = {};
@@ -1149,6 +1250,107 @@ function fpInbox(main) {
     recount();
   });
 
+  // OP#1890: Sperren in „Braucht dich“. Eigene Zeilen (data-fp-inbox-denied), nicht an fp:run-states gebunden. Rang 1 (wie eine
+  // Rückfrage) nur bei Schutzziel oder ab drei Ablehnungen in einem Thread. Die Zeile nennt die Kategorie, nie den Befehl.
+  // „Gesehen“ merkt sich die Zahl im Browser (localStorage); neue Sperren holen die Zeile zurück.
+  function seenKey(ticket) { return "fp-denial-seen:" + ticket; }
+  function readSeen(ticket, entry) {
+    var stored = 0;
+    try { stored = Number(window.localStorage.getItem(seenKey(ticket))) || 0; } catch (error) { stored = 0; }
+    var value = fpDenialSeenFor(entry, stored);
+    if (value !== stored) writeSeen(ticket, value);
+    return value;
+  }
+  function writeSeen(ticket, count) {
+    try { window.localStorage.setItem(seenKey(ticket), String(count)); } catch (error) { /* ohne Speicher bleibt die Zeile bis zum Neuladen weg */ }
+  }
+  function denialLabels() {
+    var home = document.getElementById("fp-home");
+    try { return JSON.parse((home && home.dataset.fpDenialCategories) || "{}") || {}; } catch (error) { return {}; }
+  }
+  function buildDenied(id, entry) {
+    var known = info(id);
+    var li = document.createElement("li");
+    li.className = "fp-wl-row fp-inbox-row";
+    li.tabIndex = -1;
+    li.setAttribute("data-fp-inbox-row", "");
+    li.setAttribute("data-fp-inbox-denied", "");
+    li.dataset.kind = "denied";
+    li.dataset.rank = "1";
+    li.dataset.since = String(Math.floor(Date.now() / 1000));
+    li.dataset.id = String(id);
+    li.dataset.subject = known.subject || "";
+    li.dataset.project = known.project || "";
+    li.dataset.status = known.status || "";
+    li.dataset.labels = known.labels || "[]";
+    li.dataset.url = known.url || "/work_packages/" + id;
+    var line = document.createElement("div");
+    line.className = "fp-wl-line";
+    var pill = document.createElement("span");
+    pill.className = "fp-run-pill fp-run-pill--denied";
+    pill.setAttribute("data-fp-denial-pill", "");
+    pill.textContent = fpDenialPillText(entry, fpDenialTemplate());
+    var link = document.createElement("a");
+    link.className = "fp-wl-id";
+    link.href = "/flightplan/work_packages/" + id;
+    link.setAttribute("data-turbo", "false");
+    link.textContent = "#" + id;
+    var title = document.createElement("span");
+    title.className = "fp-wl-title";
+    title.textContent = known.subject || "";
+    line.appendChild(pill);
+    line.appendChild(link);
+    line.appendChild(title);
+    li.appendChild(line);
+    var note = document.createElement("p");
+    note.className = "fp-req-hint";
+    note.setAttribute("data-fp-denial-note", "");
+    note.textContent = fpDenialCategoryLabel(entry.category, denialLabels());
+    li.appendChild(note);
+    var seen = document.createElement("button");
+    seen.type = "button";
+    seen.className = "fp-q-send";
+    seen.setAttribute("data-fp-denial-seen", String(entry.count));
+    seen.textContent = (document.getElementById("fp-home") || { dataset: {} }).dataset.fpDenialSeen || "Gesehen";
+    li.appendChild(seen);
+    return li;
+  }
+  window.addEventListener("fp:denials", function (event) {
+    var denials = event.detail.denials;
+    rows().forEach(function (row) {
+      if (!row.hasAttribute("data-fp-inbox-denied")) return;
+      var entry = denials[Number(row.dataset.id)];
+      if (!entry || !fpDenialRowVisible(entry, readSeen(row.dataset.id, entry))) row.remove();
+    });
+    Object.keys(denials).forEach(function (key) {
+      var id = Number(key);
+      var entry = denials[key];
+      if (!fpDenialRowVisible(entry, readSeen(id, entry))) return;
+      var existing = rows().filter(function (row) { return row.hasAttribute("data-fp-inbox-denied") && Number(row.dataset.id) === id; })[0];
+      if (existing) {
+        var pill = existing.querySelector("[data-fp-denial-pill]");
+        if (pill) pill.textContent = fpDenialPillText(entry, fpDenialTemplate());
+        var note = existing.querySelector("[data-fp-denial-note]");
+        if (note) note.textContent = fpDenialCategoryLabel(entry.category, denialLabels());
+        var button = existing.querySelector("[data-fp-denial-seen]");
+        if (button) button.setAttribute("data-fp-denial-seen", String(entry.count));
+        return;
+      }
+      holder.appendChild(buildDenied(id, entry));
+    });
+    order();
+    recount();
+  });
+  box.addEventListener("click", function (event) {
+    var button = event.target.closest && event.target.closest("[data-fp-denial-seen]");
+    var row = button && button.closest("[data-fp-inbox-denied]");
+    if (!row) return;
+    event.preventDefault();
+    writeSeen(row.dataset.id, Number(button.getAttribute("data-fp-denial-seen")) || 0);
+    row.remove();
+    recount();
+  });
+
   function settle() {
     recount();
     window.setTimeout(function () {
@@ -1495,6 +1697,7 @@ function fpMountChat(root, frame) {
     }
     if (data.type === "fp:activity" && bar) {
       fpPublishRun(fpParseActivity(data));
+      fpPublishDenials(fpParseDenials(data));
       return;
     }
     if (data.type === "fp:thread" && bar) {
@@ -2302,6 +2505,7 @@ function fpWorklist(main) {
     fpInbox(main);
   }
   fpRunPills();
+  fpDenialPills();
   fpSlots();
 })();
 

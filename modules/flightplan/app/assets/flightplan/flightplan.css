@@ -2246,6 +2246,13 @@ a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addon
   color: var(--fgColor-attention, #9a6700);
 }
 
+/* OP#1890: Sperren-Zähler, ruhig gelb wie „Eingabe nötig“, ohne Alarm. */
+.fp-run-pill--denied {
+  border-color: var(--borderColor-attention-muted, #d4a72c66);
+  background: var(--bgColor-attention-muted, #fff8c5);
+  color: var(--fgColor-attention, #9a6700);
+}
+
 .fp-run-pill--question {
   border-color: var(--borderColor-accent-muted, #54aeff66);
   background: var(--bgColor-accent-muted, #ddf4ff);

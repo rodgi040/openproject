@@ -84,6 +84,20 @@ en:
     forward:
       pending: "The agent has not received the answer yet"
       no_thread: "No chat for this ticket"
+    denials:
+      label: "%{count} blocked"
+      seen: "Seen"
+      categories:
+        git-push-main: "Push to main/master"
+        git-push-force: "forced push"
+        sudo: "sudo"
+        systemctl: "Changing services"
+        docker: "Docker"
+        rm-ausserhalb: "Deleting outside the work folder"
+        schreibziel-geschuetzt: "protected write target"
+        fp-op-doctor: "fp-op doctor"
+        zu-lang: "Command too long"
+        pruefung-fehlgeschlagen: "Check failed"
     start:
       button: "Start in background"
       title: "Start the agent in the background (s)"
