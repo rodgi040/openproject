@@ -2320,3 +2320,113 @@ a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addon
   font: inherit;
   font-size: 0.7rem;
 }
+
+/* OP#1839: Karte „Ergebnis zur Abnahme“ in „Braucht dich“ (Abschlussaussage, PR, Annahmen). */
+.fp-run-pill--result {
+  border-color: var(--borderColor-done-muted, #c297ff66);
+  background: var(--bgColor-done-muted, #fbefff);
+  color: var(--fgColor-done, #8250df);
+}
+
+.fp-inbox-row .fp-result,
+.fp-inbox-row .fp-result-missing,
+.fp-inbox-row .fp-assumption {
+  margin: 0.3rem 0.1rem 0;
+  cursor: auto;
+}
+
+.fp-result-title {
+  margin: 0.3rem 0 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--fgColor-muted, #59636e);
+}
+
+.fp-result-body {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.fp-result-missing,
+.fp-result-nopr {
+  color: var(--fgColor-muted, #59636e);
+}
+
+.fp-result-pr {
+  overflow-wrap: anywhere;
+}
+
+.fp-assumption {
+  padding: 0.3rem 0.5rem;
+  border-left: 3px solid var(--borderColor-attention-muted, #d4a72c66);
+  background: var(--bgColor-muted, #f6f8fa);
+}
+
+.fp-assumption-text {
+  margin: 0 0 0.3rem;
+  overflow-wrap: anywhere;
+}
+
+.fp-assumption-btn {
+  font: inherit;
+  font-size: 0.8rem;
+  min-height: 1.9rem;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--fgColor-accent, #0969da);
+  border-radius: 6px;
+  background: var(--bgColor-default, #ffffff);
+  color: var(--fgColor-accent, #0969da);
+  cursor: pointer;
+}
+
+.fp-assumption-reject {
+  border-color: var(--fgColor-danger, #d1242f);
+  color: var(--fgColor-danger, #d1242f);
+}
+
+.fp-assumption-btn:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+/* OP#1840: Hintergrundstart (Taste s), Meldung in der Zeile und Platzanzeige. */
+.fp-start {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 0 0.45rem;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: 6px;
+  background: var(--bgColor-muted, #f6f8fa);
+  color: var(--fgColor-default, #1f2328);
+  cursor: pointer;
+}
+
+.fp-start[hidden],
+.fp-start-note[hidden],
+.fp-slots[hidden] {
+  display: none;
+}
+
+.fp-start:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.fp-start-note {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  color: var(--fgColor-muted, #59636e);
+}
+
+.fp-start-note.is-error {
+  color: var(--fgColor-danger, #d1242f);
+}
+
+.fp-slots {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  color: var(--fgColor-muted, #59636e);
+  white-space: nowrap;
+}

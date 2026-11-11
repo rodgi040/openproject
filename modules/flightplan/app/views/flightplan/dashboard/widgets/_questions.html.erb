@@ -15,7 +15,7 @@
       <h3 class="fp-dash-group"><%= group[:label] %> <span class="fp-badge" data-fp-group-count><%= group[:rows].size %></span></h3>
       <% group[:rows].each do |row| %>
         <%= tag.article(id: "q-#{row[:id]}", class: "fp-q",
-                        data: { fp_question: row[:id], fp_answered_text: t("flightplan.questions.widget.answered"),
+                        data: { fp_question: row[:id], fp_answered_text: t("flightplan.questions.widget.answered"), fp_saved_hint: t("flightplan.questions.answer_saved"),
                                 fp_sending_text: t("flightplan.questions.widget.sending"), fp_failed_text: t("flightplan.questions.widget.failed"),
                                 **Flightplan::WidgetFilters.item_data(bereich: row[:bereich], path: row[:project_path], statuses: [row[:status]], labels: row[:labels]) }) do %>
           <header class="fp-q-head">

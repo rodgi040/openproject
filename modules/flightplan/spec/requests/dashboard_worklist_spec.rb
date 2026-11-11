@@ -177,8 +177,8 @@ RSpec.describe "Flightplan work list", :skip_csrf, type: :rails_request do
         expect(Flightplan::Worklist.inbox_questions(nil)).to eq([])
       end
 
-      it "ranks approval before question before failure before input and is not limited by SHOWN" do
-        expect(Flightplan::Worklist::INBOX_KINDS).to eq(%w[approval question error input])
+      it "ranks approval before question before result (OP#1839) before failure before input and is not limited by SHOWN" do
+        expect(Flightplan::Worklist::INBOX_KINDS).to eq(%w[approval question result error input])
         expect(Flightplan::Worklist::RUN_STATES).to eq(%w[working approval input error])
         rows = Array.new(Flightplan::Worklist::SHOWN + 3) { |index| entry(index, index) }
         expect(Flightplan::Worklist.inbox_questions(rows).size).to eq(rows.size)

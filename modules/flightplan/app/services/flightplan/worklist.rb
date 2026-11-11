@@ -15,9 +15,10 @@ module Flightplan
     VIEWS = %w[board worklist].freeze
 
     # OP#1835: Abschnitt „Braucht dich“ oben in der Arbeitsliste. Die Reihenfolge ist der Rang: Befehlsfreigabe, offene
-    # Rückfrage, Lauf fehlgeschlagen, Eingabe nötig. Nur die Rückfragen kennt der Server (Tabelle flightplan_questions);
-    # die anderen drei Arten kommen als Laufzustand je Ticket per fp:activity im Browser an (flightplan.js, fpInbox).
-    INBOX_KINDS = %w[approval question error input].freeze
+    # Rückfrage, Ergebnis zur Abnahme (OP#1839), Lauf fehlgeschlagen, Eingabe nötig. Rückfragen und Abnahmekarten kennt
+    # der Server (flightplan_questions, flightplan_assumptions, Flightplan::Acceptance); die anderen drei Arten kommen als
+    # Laufzustand je Ticket per fp:activity im Browser an (flightplan.js, fpInbox).
+    INBOX_KINDS = %w[approval question result error input].freeze
     # Laufzustände, die T3 je Ticket melden darf (fp:activity v2). `working` erscheint nicht im Abschnitt, nur als Pille.
     RUN_STATES = %w[working approval input error].freeze
 
@@ -28,8 +29,8 @@ module Flightplan
       Array(rows).select { |row| row[:text].present? }.sort_by { |row| [row[:since], row[:id]] }
     end
 
-    def self.inbox_count(rows)
-      inbox_questions(rows).size
+    def self.inbox_count(rows, results = [])
+      inbox_questions(rows).size + Array(results).size
     end
   end
 end

@@ -79,6 +79,11 @@
                       <div class="fp-wl-line">
                         <%= link_to "##{card.id}", flightplan_workplace_path(card.id), class: "fp-wl-id", data: { turbo: false }, title: t("flightplan.worklist.open_ticket") %>
                         <span class="fp-wl-title"><%= card.subject %></span>
+                        <% unless Flightplan::Board::CLOSED_COLUMNS.include?(key) %>
+                          <%# OP#1840: nur mit T3-Rahmen (diese Ansicht gibt es nur für Admins); JS blendet den Knopf bei laufendem Agenten aus. %>
+                          <button type="button" class="fp-start" data-fp-start title="<%= t("flightplan.start.title") %>"><%= t("flightplan.start.button") %></button>
+                          <span class="fp-start-note" data-fp-start-note role="status" hidden></span>
+                        <% end %>
                         <span class="fp-wl-flag" aria-hidden="true"><%= t("flightplan.worklist.in_chat") %></span>
                         <% if days %><span class="fp-wl-age" title="<%= card.updated_at.strftime("%d.%m.%Y %H:%M") %>"><%= days.zero? ? t("flightplan.worklist.today") : t("flightplan.worklist.days", count: days) %></span><% end %>
                       </div>

@@ -8,6 +8,7 @@
      data-fp-chat="<%= with_chat ? "1" : "0" %>"
      data-fp-view="split"
      data-fp-run-labels="<%= Flightplan::Worklist::RUN_STATES.to_h { |state| [state, t("flightplan.worklist.inbox.states.#{state}")] }.to_json %>"
+     data-fp-start-labels="<%= %w[sending accepted running slots_full error no_context].to_h { |key| [key, t("flightplan.start.#{key}")] }.to_json %>"
      data-menu-rail="<%= t("flightplan.home.menu_rail") %>"
      data-menu-unrail="<%= t("flightplan.home.menu_unrail") %>">
   <% if with_chat %>
@@ -23,11 +24,14 @@
         <button type="button" role="tab" id="fp-home-tab-chat" aria-controls="fp-home-chat" aria-selected="false" data-fp-tab="chat"><%= t("flightplan.home.tab_chat") %></button>
       </div>
       <div class="fp-home-viewbar-end">
+        <%# OP#1840: Plätze aus den gemeldeten Zuständen `working` (fp:activity); ohne Meldung bleibt die Anzeige weg. %>
+        <span class="fp-slots" data-fp-slots data-template="<%= t("flightplan.start.slots", count: "__N__") %>"
+              title="<%= t("flightplan.start.slots_hint") %>" hidden></span>
         <% if @dashboard && @board_widget %>
           <%# OP#1835: Zähler „Braucht dich (N)“; Klick zeigt die Arbeitsliste und springt in den Abschnitt. %>
           <button type="button" class="fp-home-inbox" data-fp-inbox-count data-template="<%= t("flightplan.worklist.inbox.count", count: "__N__") %>"
-                  title="<%= t("flightplan.worklist.inbox.count_hint") %>"<%= " hidden".html_safe if Flightplan::Worklist.inbox_count(@questions_widget&.rows).zero? %>>
-            <%= t("flightplan.worklist.inbox.count", count: Flightplan::Worklist.inbox_count(@questions_widget&.rows)) %>
+                  title="<%= t("flightplan.worklist.inbox.count_hint") %>"<%= " hidden".html_safe if Flightplan::Worklist.inbox_count(@questions_widget&.rows, @acceptance).zero? %>>
+            <%= t("flightplan.worklist.inbox.count", count: Flightplan::Worklist.inbox_count(@questions_widget&.rows, @acceptance)) %>
           </button>
         <% end %>
         <span class="fp-home-viewbar-hint" data-fp-view-hint

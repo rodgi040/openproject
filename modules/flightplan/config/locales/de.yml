@@ -21,6 +21,7 @@ de:
       answered: Beantwortet.
       answered_summary: "Beantwortet: %{answer} – #%{id}, Status jetzt %{status}"
       answer_by: Antwort von %{user}
+      answer_saved: "Antwort gespeichert. Der Agent läuft weiter, solange dieses Dashboard offen ist."
       widget:
         title: Rückfragen
         hint: "Offene Rückfragen der Agents, älteste zuerst. Eine Option schickt die Antwort sofort ab, der Freitext geht mit."
@@ -31,6 +32,37 @@ de:
         answered: Beantwortet.
         sending: Wird gesendet …
         failed: Antwort fehlgeschlagen.
+    acceptance:
+      assumption: "Annahme"
+      confirm: "bestätigen"
+      reject: "verwerfen"
+      note_label: "Hinweis zur Annahme"
+      note_placeholder: "Hinweis (beim Verwerfen Pflicht)"
+      note_required: "Zum Verwerfen bitte einen Hinweis eintragen."
+      failed: "Entscheidung fehlgeschlagen."
+      no_pr: "Kein PR verlinkt"
+      no_result: "Keine Abschlussaussage vom Agenten."
+      sections:
+        changed: "Geändert"
+        checked: "Geprüft"
+        open: "Offen"
+      decided:
+        confirmed: "Annahme bestätigt – #%{id}"
+        rejected: "Annahme verworfen – #%{id}"
+      decided_short:
+        confirmed: "Annahme bestätigt."
+        rejected: "Annahme verworfen."
+    start:
+      button: "Im Hintergrund starten"
+      title: "Agent im Hintergrund starten (s)"
+      sending: "Start wird gesendet …"
+      accepted: "gestartet"
+      running: "läuft schon"
+      slots_full: "4 von 4 Plätzen belegt"
+      error: "Start nicht möglich"
+      no_context: "Ticket nicht verfügbar"
+      slots: "%{count} von 4 Plätzen belegt"
+      slots_hint: "Ticket-Threads mit laufendem Agenten (höchstens 4 gleichzeitig)"
     board:
       title: Flightplan
       projects: Projekte
@@ -174,16 +206,17 @@ de:
         other: "%{count} offen"
       path_missing: "Weg fehlt"
       no_hits: "Keine Treffer für diese Suche."
-      keys: "j / k Zeile · ↵ in den Chat · o Ticket öffnen · . nächstes · c neuer Chat · / suchen · 1–4 Reiter · i Braucht dich · 1–9 Antwort wählen"
+      keys: "j / k Zeile · ↵ in den Chat · o Ticket öffnen · . nächstes · c neuer Chat · / suchen · 1–4 Reiter · i Braucht dich · 1–9 Antwort wählen · s im Hintergrund starten"
       inbox:
         title: "Braucht dich"
-        hint: "Freigabe, Rückfrage, Fehler, Eingabe"
+        hint: "Freigabe, Rückfrage, Abnahme, Fehler, Eingabe"
         empty: "Nichts wartet auf dich."
         count: "Braucht dich (%{count})"
         count_hint: "Zur Liste „Braucht dich“"
         kinds:
           approval: "Befehlsfreigabe"
           question: "Rückfrage"
+          result: "Ergebnis zur Abnahme"
           error: "Lauf fehlgeschlagen"
           input: "Eingabe nötig"
         states:

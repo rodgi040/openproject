@@ -103,6 +103,10 @@
       dragged = false;
       return;
     }
+    if (event.target.closest("[data-fp-start]")) {
+      fpStartTicket(card);
+      return;
+    }
     if (event.target.closest("a, button")) return;
     window.dispatchEvent(new CustomEvent("fp:card-selected", {
       detail: {
@@ -219,10 +223,34 @@ function fpAnsweredMessage(id, response, payload) {
   return {
     type: "fp:answered",
     questionId: Number(id),
+    // OP#1840: Ticket der Frage, damit der Rahmen die Antwort in den Thread des Tickets weitergeben kann.
+    ticket: ok ? (fpTicketNumber(answer.work_package_id) || null) : null,
     ok: ok,
     status: ok ? String(answer.status || "") : "",
     answer: ok ? String(answer.option || answer.text || "") : "",
     error: ok ? "" : String((payload && payload.error) || (response ? "HTTP " + response.status : "Netzwerkfehler"))
+  };
+}
+
+// OP#1839/OP#1840: Nachrichten an den Rahmen von Code außerhalb von fpMountChat (Antwort im Widget, Entscheidung zur Annahme).
+// Der Rahmen (fpMountChat) schickt sie an die Chat-Origin weiter; erlaubt sind nur diese Typen.
+function fpPostToFrame(message) {
+  window.dispatchEvent(new CustomEvent("fp:frame-post", { detail: message }));
+}
+
+// OP#1840: Nachricht fp:assumption nach dem Entscheiden einer Annahme (Vertrag Phase 2a, Abschnitt 4).
+function fpAssumptionMessage(payload) {
+  var item = (payload && payload.assumption) || {};
+  var ticket = fpTicketNumber(item.work_package_id);
+  var id = fpTicketNumber(item.id);
+  if (!payload || !payload.ok || !ticket || !id || (item.status !== "confirmed" && item.status !== "rejected")) return null;
+  return {
+    type: "fp:assumption",
+    ticket: ticket,
+    assumptionId: id,
+    decision: item.status,
+    text: String(item.text || ""),
+    note: item.status === "rejected" && item.note ? String(item.note) : null
   };
 }
 
@@ -405,6 +433,26 @@ function fpTicketNumber(value) {
   return Number.isInteger(id) && id > 0 ? id : 0;
 }
 
+// OP#1840: Hintergrundstart eines Tickets (Taste s, Knopf „Im Hintergrund starten“). Die Zeile (Arbeitsliste, Board-Karte,
+// Braucht-dich-Zeile) trägt die Ticketnummer; fpMountChat holt den Kontext und schickt fp:start.
+function fpStartTicket(node) {
+  var id = fpTicketNumber(node && node.dataset && node.dataset.id);
+  if (!id) return;
+  window.dispatchEvent(new CustomEvent("fp:start-request", { detail: { id: id, node: node } }));
+}
+
+// OP#1840: „n von 4 Plätzen belegt“ aus den gemeldeten Zuständen `working`. Erst nach der ersten Meldung des Rahmens.
+function fpSlots() {
+  var label = document.querySelector("[data-fp-slots]");
+  if (!label) return;
+  window.addEventListener("fp:run-states", function (event) {
+    var states = event.detail.states;
+    var working = Object.keys(states).filter(function (id) { return states[id].state === "working"; }).length;
+    label.textContent = (label.dataset.template || "").replace("__N__", String(working));
+    label.hidden = false;
+  });
+}
+
 function fpParseActivity(data) {
   var out = {};
   function put(value, state, thread) {
@@ -451,6 +499,9 @@ function fpRunPills() {
       var entry = states[Number(node.dataset.id)];
       var pill = node.querySelector("[data-fp-run-pill]");
       var line = node.querySelector(".fp-wl-line, .fp-card-line");
+      // OP#1840: „Im Hintergrund starten“ nur an Tickets ohne Thread-Zustand (kein laufender Agent).
+      var starter = node.querySelector("[data-fp-start]");
+      if (starter) starter.hidden = !!entry;
       if (!entry) {
         if (pill) pill.remove();
         return;
@@ -477,7 +528,7 @@ function fpInbox(main) {
   var total = box.querySelector("[data-fp-inbox-total]");
   var empty = box.querySelector("[data-fp-inbox-empty]");
   var counter = document.querySelector("[data-fp-inbox-count]");
-  var RANK = { approval: 0, question: 1, error: 2, input: 3 };
+  var RANK = { approval: 0, question: 1, result: 2, error: 3, input: 4 };
 
   function rows() {
     return Array.prototype.slice.call(holder.querySelectorAll("[data-fp-inbox-row]"));
@@ -583,12 +634,63 @@ function fpInbox(main) {
     recount();
   });
 
-  window.addEventListener("fp:questions-changed", function () {
+  function settle() {
     recount();
     window.setTimeout(function () {
       rows().forEach(function (row) { if (!open(row)) row.remove(); });
       recount();
     }, 2500);
+  }
+  window.addEventListener("fp:questions-changed", settle);
+  window.addEventListener("fp:inbox-recount", settle);
+
+  // OP#1839: Annahme bestätigen oder verwerfen (Session, CSRF); danach bekommt der Rahmen fp:assumption.
+  box.addEventListener("submit", function (event) {
+    var form = event.target.closest && event.target.closest("form[data-fp-assumption-form]");
+    if (!form || typeof fetch !== "function" || typeof FormData !== "function") return;
+    event.preventDefault();
+    var row = form.closest("[data-fp-inbox-row]");
+    var item = form.closest("[data-fp-assumption]");
+    var note = row && row.querySelector("[data-fp-assumption-note]");
+    var submitter = event.submitter;
+    var body = new FormData(form);
+    if (submitter && submitter.name) body.set(submitter.name, submitter.value);
+    function show(text, error) {
+      if (!note) return;
+      note.textContent = text || "";
+      note.classList.toggle("is-error", !!error);
+      note.setAttribute("role", error ? "alert" : "status");
+      note.hidden = false;
+    }
+    if (body.get("decision") === "rejected" && !String(body.get("note") || "").trim()) {
+      show(row.dataset.fpNoteRequired, true);
+      return;
+    }
+    var buttons = form.querySelectorAll("button");
+    buttons.forEach(function (button) { button.disabled = true; });
+    show(row.dataset.fpSendingText, false);
+    var token = form.querySelector("input[name='authenticity_token']");
+    fetch(form.action, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Accept": "application/json", "X-CSRF-Token": token ? token.value : "" },
+      body: body
+    }).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (payload) {
+        if (!response.ok || !payload.ok) throw { fpMessage: payload.error };
+        var message = fpAssumptionMessage(payload);
+        if (message) fpPostToFrame(message);
+        if (item) item.remove();
+        show(payload.message, false);
+        if (!row.querySelector("[data-fp-assumption]") && row.dataset.fpReview !== "1") {
+          row.classList.add("is-answered");
+          settle();
+        }
+      });
+    }).catch(function (error) {
+      buttons.forEach(function (button) { button.disabled = false; });
+      show((error && error.fpMessage) || row.dataset.fpFailedText, true);
+    });
   });
 
   function openRow(row) {
@@ -656,6 +758,7 @@ function fpInbox(main) {
       var next = move(1, true);
       if (next) openRow(next);
     } else if (key === "o" && row) openRow(row);
+    else if (key === "s" && row) fpStartTicket(row);
     else if (key === "Enter" && row && target === row) openRow(row);
     else if (/^[1-9]$/.test(key) && row) {
       var option = row.querySelectorAll(".fp-q-option")[Number(key) - 1];
@@ -842,6 +945,10 @@ function fpMountChat(root, frame) {
       sendState();
       return;
     }
+    if (data.type === "fp:started" && bar) {
+      finishStart(data);
+      return;
+    }
     if (data.type === "fp:activity" && bar) {
       fpPublishRun(fpParseActivity(data));
       return;
@@ -921,6 +1028,98 @@ function fpMountChat(root, frame) {
     questions = (event.detail && event.detail.items) || [];
     sendState();
   });
+
+  // OP#1839/OP#1840: Antwort aus dem Dashboard, Entscheidung zu einer Annahme und Hintergrundstart gehen als Nachricht an den
+  // Rahmen. Nur diese drei Typen; alle Felder hat der Absender im Dashboard schon aus Server-Antworten gebaut.
+  var FRAME_TYPES = ["fp:answered", "fp:assumption", "fp:start"];
+  window.addEventListener("fp:frame-post", function (event) {
+    var message = event.detail;
+    if (message && FRAME_TYPES.indexOf(message.type) !== -1) post(message);
+  });
+
+  // OP#1840: Hintergrundstart. Der Kontext kommt wie bei fp:context von GET /flightplan/chat/context?wp= und wird vor dem
+  // Senden geholt. Die Meldung steht in der Zeile des Tickets; ohne fp:started nach 15 s gilt der Start als nicht möglich.
+  var startLabels = null;
+  function startText(key) {
+    if (!startLabels) {
+      var home = document.getElementById("fp-home");
+      try { startLabels = JSON.parse((home && home.dataset.fpStartLabels) || "{}") || {}; } catch (error) { startLabels = {}; }
+    }
+    var fallback = { sending: "Start wird gesendet …", accepted: "gestartet", running: "läuft schon", slots_full: "4 von 4 Plätzen belegt",
+                     error: "Start nicht möglich", no_context: "Ticket nicht verfügbar" };
+    return startLabels[key] || fallback[key] || "";
+  }
+  var pendingStarts = {};
+  function startNote(ticket, text, error) {
+    var entry = pendingStarts[ticket];
+    var node = entry && entry.node;
+    if (!node || !node.isConnected) return;
+    var note = node.querySelector("[data-fp-start-note]");
+    if (!note) {
+      note = document.createElement("span");
+      note.className = "fp-start-note";
+      note.setAttribute("data-fp-start-note", "");
+      note.setAttribute("role", "status");
+      var line = node.querySelector(".fp-wl-line, .fp-card-line");
+      (line || node).appendChild(note);
+    }
+    note.textContent = text;
+    note.classList.toggle("is-error", !!error);
+    note.hidden = !text;
+  }
+  function endStart(ticket) {
+    var entry = pendingStarts[ticket];
+    if (!entry) return;
+    window.clearTimeout(entry.timer);
+    var button = entry.node && entry.node.isConnected ? entry.node.querySelector("[data-fp-start]") : null;
+    if (button) button.disabled = false;
+  }
+  function finishStart(data) {
+    var ticket = fpTicketNumber(data.ticket);
+    if (!ticket || !pendingStarts[ticket]) return;
+    var reason = data.reason === "slots" || data.reason === "running" || data.reason === "error" ? data.reason : null;
+    if (data.result === "accepted") startNote(ticket, startText("accepted"), false);
+    else if (reason === "slots") startNote(ticket, startText("slots_full"), true);
+    else if (reason === "running") startNote(ticket, startText("running"), true);
+    else startNote(ticket, startText("error"), true);
+    endStart(ticket);
+  }
+  // `bar` ist erst weiter unten gesetzt; geprüft wird beim Ereignis.
+  {
+    window.addEventListener("fp:start-request", function (event) {
+      if (!bar || !frame) return;
+      var detail = event.detail || {};
+      var ticket = fpTicketNumber(detail.id);
+      if (!ticket || (pendingStarts[ticket] && pendingStarts[ticket].busy)) return;
+      pendingStarts[ticket] = { node: detail.node, busy: true, timer: 0 };
+      var button = detail.node && detail.node.querySelector ? detail.node.querySelector("[data-fp-start]") : null;
+      if (button) button.disabled = true;
+      startNote(ticket, startText("sending"), false);
+      fetch("/flightplan/chat/context?wp=" + encodeURIComponent(ticket), {
+        headers: { "Accept": "application/json" },
+        credentials: "same-origin"
+      }).then(function (response) {
+        return response.ok ? response.json() : null;
+      }).then(function (payload) {
+        if (!payload || !payload.ok || !payload.wp || Number(payload.wp.id) !== ticket) {
+          startNote(ticket, startText("no_context"), true);
+          pendingStarts[ticket].busy = false;
+          endStart(ticket);
+          return;
+        }
+        pendingStarts[ticket].busy = false;
+        pendingStarts[ticket].timer = window.setTimeout(function () {
+          startNote(ticket, startText("error"), true);
+          endStart(ticket);
+        }, 15000);
+        post({ type: "fp:start", ticket: ticket, context: payload.wp });
+      }).catch(function () {
+        startNote(ticket, startText("error"), true);
+        pendingStarts[ticket].busy = false;
+        endStart(ticket);
+      });
+    });
+  }
 
   // OP#1674: Klick auf eine Board-Karte im Dashboard gibt dem Chat das Ticket als Kontext.
   window.addEventListener("fp:card-selected", function (event) {
@@ -1497,6 +1696,10 @@ function fpWorklist(main) {
       return;
     }
     var row = event.target.closest("[data-fp-worklist-row]");
+    if (row && event.target.closest("[data-fp-start]")) {
+      fpStartTicket(row);
+      return;
+    }
     if (!row || event.target.closest("a, button")) return;
     openRow(row);
   });
@@ -1544,7 +1747,9 @@ function fpWorklist(main) {
     if (target && target.closest && target.closest("[data-fp-inbox]")) return;
     var row = target && target.closest ? target.closest("[data-fp-worklist-row]") : null;
     var key = event.key;
-    if (key === "j" || key === "ArrowDown") move(1);
+    if (key === "s" && row) {
+      if (row.querySelector("[data-fp-start]:not([hidden])")) fpStartTicket(row);
+    } else if (key === "j" || key === "ArrowDown") move(1);
     else if (key === "k" || key === "ArrowUp") move(-1);
     else if (key === "Enter" && row) openRow(row);
     else if (key === "o" && row) window.location.href = row.querySelector(".fp-wl-id").href;
@@ -1581,6 +1786,7 @@ function fpWorklist(main) {
     fpInbox(main);
   }
   fpRunPills();
+  fpSlots();
 })();
 
 (function () {
@@ -1854,7 +2060,8 @@ function fpMarkAnswered(id, message, status) {
       note.classList.remove("is-error");
       note.classList.add("is-done");
       note.setAttribute("role", "status");
-      note.textContent = message || item.getAttribute("data-fp-answered-text") || "";
+      note.textContent = [message || item.getAttribute("data-fp-answered-text") || "", item.getAttribute("data-fp-saved-hint") || ""]
+        .filter(Boolean).join(" ");
       note.hidden = false;
       if (typeof note.scrollIntoView === "function") note.scrollIntoView({ block: "nearest" });
     }
@@ -1942,6 +2149,8 @@ function fpMarkAnswered(id, message, status) {
       return response.json().catch(function () { return {}; }).then(function (payload) {
         if (!response.ok || !payload.ok) throw { fpMessage: payload.error };
         fpMarkAnswered(form.getAttribute("data-fp-question-form"), payload.answer && payload.answer.message, payload.answer && payload.answer.status);
+        // OP#1840: auch eine Antwort aus dem Dashboard gibt der Rahmen an den Thread des Tickets weiter.
+        fpPostToFrame(fpAnsweredMessage(form.getAttribute("data-fp-question-form"), response, payload));
         window.dispatchEvent(new CustomEvent("fp:questions-changed", { detail: { items: payload.items || [] } }));
       });
     }).catch(function (error) {
