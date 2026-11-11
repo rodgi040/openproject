@@ -12,6 +12,11 @@
     <span class="fp-wl-count" data-fp-inbox-total><%= total %></span>
     <span class="fp-wl-hint"><%= t("flightplan.worklist.inbox.hint") %></span>
   </header>
+  <%# OP#1843: Schatten-Messung, nur Admins. Zeigt, was die Regel SHADOW_RULE_V1 getan HÄTTE; nichts wird dadurch beantwortet. %>
+  <% if User.current.admin? %>
+    <% shadow = Flightplan::Shadow.summary %>
+    <p class="fp-wl-hint fp-shadow" data-fp-shadow title="<%= t("flightplan.shadow.title") %> (<%= shadow[:rule] %>)"><%= t("flightplan.shadow.summary", total: shadow[:total], matched: shadow[:matched], would_auto: shadow[:would_auto], wrong: shadow[:wrong]) %></p>
+  <% end %>
   <p class="fp-wl-empty" data-fp-inbox-empty<%= " hidden".html_safe if total.positive? %>><%= t("flightplan.worklist.inbox.empty") %></p>
   <ol class="fp-wl-rows fp-inbox-rows" data-fp-inbox-rows>
     <% entries.each do |row| %>
@@ -19,7 +24,8 @@
             fp_inbox_row: "", kind: "question", rank: Flightplan::Worklist::INBOX_KINDS.index("question"),
             since: row[:since].to_i, id: row[:work_package_id], subject: row[:subject], project: row[:project_path].last,
             status: row[:status], labels: row[:labels].to_json, url: work_package_path(row[:work_package_id]),
-            fp_question: row[:id], fp_answered_text: t("flightplan.questions.widget.answered"), fp_saved_hint: t("flightplan.questions.answer_saved"),
+            fp_question: row[:id], fp_recommended: row[:question].recommended_option.presence, fp_qkind: row[:question].kind.to_s,
+            fp_reversible: (row[:question].reversible.nil? ? nil : row[:question].reversible.to_s), fp_answered_text: t("flightplan.questions.widget.answered"), fp_saved_hint: t("flightplan.questions.answer_saved"),
             fp_sending_text: t("flightplan.questions.widget.sending"), fp_failed_text: t("flightplan.questions.widget.failed")
           } do %>
         <div class="fp-wl-line">
@@ -32,7 +38,7 @@
           <span><%= row[:project] %></span>
           <span><%= row[:agent].presence || "–" %></span>
         </div>
-        <%= render "flightplan/dashboard/question_body", row:, return_to: "home", selected_scope: nil, compact: true, id_prefix: "fp-inbox-q-text" %>
+        <%= render "flightplan/dashboard/question_body", row:, return_to: "home", selected_scope: nil, compact: true, id_prefix: "fp-inbox-q-text", enter_hint: true %>
       <% end %>
     <% end %>
     <% results.each do |result| %>

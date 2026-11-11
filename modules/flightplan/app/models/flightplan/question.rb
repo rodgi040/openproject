@@ -6,6 +6,9 @@ module Flightplan
 
     STATUSES = %w[open answered].freeze
     WAITING_STATUS = "Wartet auf Mensch"
+    # OP#1842: Art der Rückfrage (fp-op ask --kind) und Obergrenze der Folge-Zeile.
+    KINDS = %w[entscheidung freigabe zugang abnahme].freeze
+    CONSEQUENCE_MAX = 500
 
     belongs_to :work_package
     belongs_to :author, class_name: "User"
@@ -18,6 +21,9 @@ module Flightplan
     validates :question, presence: true
     validates :status, inclusion: { in: STATUSES }
     validate :options_are_strings
+    validates :kind, inclusion: { in: KINDS }, allow_nil: true
+    validates :consequence, length: { maximum: CONSEQUENCE_MAX }, allow_nil: true
+    validate :recommended_is_an_option
 
     scope :open, -> { where(status: "open") }
     scope :answered, -> { where(status: "answered") }
@@ -32,6 +38,13 @@ module Flightplan
     end
 
     private
+
+    def recommended_is_an_option
+      return if recommended_option.blank?
+      return if options.include?(recommended_option)
+
+      errors.add(:recommended_option, "muss eine der Optionen sein")
+    end
 
     def options_are_strings
       return if self[:options].blank?

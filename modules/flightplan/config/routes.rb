@@ -11,6 +11,7 @@ Rails.application.routes.draw do
   get "flightplan/questions", to: "flightplan/questions#index", as: :flightplan_questions
   post "flightplan/questions/:id/answer", to: "flightplan/questions#answer", as: :flightplan_question_answer
   post "flightplan/assumptions/:id/decide", to: "flightplan/assumptions#decide", as: :flightplan_assumption_decide
+  post "flightplan/shadow", to: "flightplan/shadow#create", as: :flightplan_shadow
   get "projects/:project_id/flightplan/questions", to: "flightplan/questions#index", as: :project_flightplan_questions
   get "flightplan/chat/context", to: "flightplan/chat#ticket_context", as: :flightplan_chat_context
   get "flightplan/chat/events", to: "flightplan/chat#events", as: :flightplan_chat_events

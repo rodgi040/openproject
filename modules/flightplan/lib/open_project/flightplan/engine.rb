@@ -17,6 +17,7 @@ module OpenProject::Flightplan
       mount ::API::V3::Flightplan::QuestionsAPI
       mount ::API::V3::Flightplan::AssumptionsAPI
       mount ::API::V3::Flightplan::WikiAPI
+      mount ::API::V3::Flightplan::ShadowAPI
     end
 
     add_api_endpoint "API::V3::WorkPackages::WorkPackagesAPI", :id do

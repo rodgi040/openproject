@@ -2456,3 +2456,86 @@ a.menu-block[href$="/admin/enterprise_tokens"] > svg.octicon-op-enterprise-addon
 .fp-inbox-more {
   margin: 0.3rem 0.5rem;
 }
+
+/* OP#1842: Rückfrage mit Struktur (Art, Empfehlung, Folge) und Anfragen aus dem Chat in „Braucht dich“. */
+.fp-q-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.2rem 0 0;
+}
+
+.fp-q-kind {
+  padding: 0 0.4rem;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: 999px;
+  background: var(--bgColor-muted, #f6f8fa);
+  color: var(--fgColor-muted, #59636e);
+  font-size: 0.7rem;
+}
+
+.fp-q-irreversible {
+  border-color: var(--borderColor-danger-muted, #ff818266);
+  background: var(--bgColor-danger-muted, #ffebe9);
+  color: var(--fgColor-danger, #d1242f);
+}
+
+.fp-q-consequence,
+.fp-q-hint,
+.fp-req-hint,
+.fp-req-reason {
+  margin: 0.2rem 0 0;
+  color: var(--fgColor-muted, #59636e);
+  font-size: 0.8rem;
+}
+
+.fp-q-option.is-recommended {
+  border-width: 2px;
+  font-weight: 600;
+  background: var(--bgColor-accent-muted, #ddf4ff);
+}
+
+.fp-q-rec {
+  font-weight: 400;
+  font-size: 0.7rem;
+}
+
+.fp-req-item {
+  margin: 0.4rem 0 0;
+}
+
+.fp-req-command {
+  margin: 0.25rem 0;
+  padding: 0.4rem 0.5rem;
+  overflow-x: auto;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: 6px;
+  background: var(--bgColor-muted, #f6f8fa);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.fp-req-decide {
+  font: inherit;
+  font-size: 0.8rem;
+  min-height: 1.9rem;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--borderColor-default, #d0d7de);
+  border-radius: 6px;
+  background: var(--bgColor-default, #ffffff);
+  cursor: pointer;
+}
+
+.fp-req-decide:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.fp-req-item.is-answered {
+  opacity: 0.7;
+}
+
+.fp-shadow {
+  margin: 0.2rem 0.6rem;
+}

@@ -5,7 +5,22 @@
 <% context = row[:context] %>
 <% compact = local_assigns[:compact] %>
 <% scope_param = Flightplan::QuestionsWidget::PARAM %>
+<%# OP#1842: Art, Empfehlung, umkehrbar und Folge der Rückfrage mit Struktur (alle nullbar; ohne sie bleibt die Anzeige wie früher). %>
+<% record = row[:question] %>
+<% recommended = record.recommended_option.presence %>
+<% if record.kind.present? || record.reversible == false %>
+  <p class="fp-q-meta">
+    <% if record.kind.present? %><span class="fp-q-kind" data-fp-kind="<%= record.kind %>"><%= t("flightplan.requests.kinds.#{record.kind}", default: record.kind) %></span><% end %>
+    <% if record.reversible == false %><span class="fp-q-kind fp-q-irreversible" data-fp-irreversible><%= t("flightplan.requests.irreversible") %></span><% end %>
+  </p>
+<% end %>
 <p class="fp-q-text"><%= row[:text] %></p>
+<% if record.consequence.present? %>
+  <p class="fp-q-consequence" data-fp-consequence><strong><%= t("flightplan.requests.consequence") %>:</strong> <%= record.consequence %></p>
+<% end %>
+<% if local_assigns[:enter_hint] && recommended && record.reversible == true && (record.kind.blank? || record.kind == "entscheidung") %>
+  <p class="fp-q-hint"><kbd>Enter</kbd> <%= t("flightplan.requests.enter_hint") %></p>
+<% end %>
 <% if row[:context_text].present? && !compact %>
   <p class="fp-q-context"><%= row[:context_text] %></p>
 <% end %>
@@ -39,7 +54,8 @@
             placeholder="<%= row[:options].any? ? t("flightplan.questions.widget.free_text_optional") : t("flightplan.questions.free_text") %>"></textarea>
   <div class="fp-q-actions">
     <% row[:options].each do |option| %>
-      <button type="submit" name="option" value="<%= option %>" class="fp-q-option"><%= option %></button>
+      <% is_recommended = recommended && option == recommended %>
+      <button type="submit" name="option" value="<%= option %>" class="fp-q-option<%= ' is-recommended' if is_recommended %>"<%= ' data-fp-recommended-option'.html_safe if is_recommended %>><%= option %><% if is_recommended %> <span class="fp-q-rec">(<%= t("flightplan.requests.recommended") %>)</span><% end %></button>
     <% end %>
     <button type="submit" class="fp-q-send"><%= row[:options].any? ? t("flightplan.questions.widget.send_text") : t("flightplan.questions.submit") %></button>
   </div>

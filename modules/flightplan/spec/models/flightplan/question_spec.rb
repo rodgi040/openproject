@@ -59,3 +59,27 @@ RSpec.describe Flightplan::Question do
     expect(described_class.open.oldest_first).to eq([older, newer])
   end
 end
+
+RSpec.describe Flightplan::Question, "structure (OP#1842)" do
+  let(:project) { create(:project) }
+  let(:author) { create(:user) }
+  let(:work_package) { create(:work_package, project:, author:) }
+
+  def build(extra = {})
+    described_class.new({ work_package:, author:, question: "Weiter?", status: "open", options: %w[ja nein] }.merge(extra))
+  end
+
+  it "is valid with all structured fields unset (old form)" do
+    expect(build).to be_valid
+  end
+
+  it "is valid with a known kind, a recommended option and a short consequence" do
+    expect(build(kind: "freigabe", recommended_option: "ja", reversible: false, consequence: "x" * 500)).to be_valid
+  end
+
+  it "rejects an unknown kind, a foreign recommendation and a long consequence" do
+    expect(build(kind: "auto")).not_to be_valid
+    expect(build(recommended_option: "vielleicht")).not_to be_valid
+    expect(build(consequence: "x" * 501)).not_to be_valid
+  end
+end

@@ -55,6 +55,32 @@ de:
       decided_short:
         confirmed: "Annahme bestätigt."
         rejected: "Annahme verworfen."
+    requests:
+      kinds:
+        entscheidung: "Entscheidung"
+        freigabe: "Freigabe"
+        zugang: "Zugang"
+        abnahme: "Abnahme"
+      recommended: "empfohlen"
+      irreversible: "nicht umkehrbar"
+      consequence: "Folge"
+      enter_hint: "Enter nimmt die Empfehlung"
+      in_chat: "im Chat beantworten"
+      command: "Befehl"
+      reason: "Grund"
+      approve: "freigeben"
+      decline: "ablehnen"
+      free_text: "Freitext"
+      send_text: "Freitext senden"
+      sending: "Wird gesendet …"
+      answered: "Beantwortet."
+      gone: "schon erledigt oder geändert"
+      failed: "nicht zugestellt, im Chat prüfen"
+      too_long: "Befehl zu lang für die Anzeige, bitte im Chat beantworten"
+      shadow_failed: "Messung nicht gespeichert"
+    shadow:
+      title: "Schatten-Messung"
+      summary: "Schatten: %{total} Fälle, davon %{matched} wie empfohlen; Regel hätte %{would_auto}-mal entschieden, davon %{wrong} falsch"
     forward:
       pending: "Der Agent hat die Antwort noch nicht erhalten"
       no_thread: "Kein Chat zu diesem Ticket"
