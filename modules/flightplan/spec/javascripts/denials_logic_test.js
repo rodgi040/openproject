@@ -13,8 +13,8 @@ const priority = source.match(/var FP_RUN_PRIORITY = .*;/)[0];
 const idMax = source.match(/var FP_REQ_ID_MAX = .*;/)[0];
 const ctx = {};
 vm.createContext(ctx);
-vm.runInContext(`${ticketFn}\n${priority}\n${idMax}\n${block}\n${activityFn}\nthis.api = { fpParseDenials, fpDenialAttention, fpDenialPillText, fpDenialCategoryLabel, fpDenialRowVisible, fpParseActivity };`, ctx);
-const { fpParseDenials, fpDenialAttention, fpDenialPillText, fpDenialCategoryLabel, fpDenialRowVisible, fpParseActivity } = ctx.api;
+vm.runInContext(`${ticketFn}\n${priority}\n${idMax}\n${block}\n${activityFn}\nthis.api = { fpParseDenials, fpDenialAttention, fpDenialPillText, fpDenialCategoryLabel, fpDenialRowVisible, fpDenialSeenFor, fpParseActivity };`, ctx);
+const { fpParseDenials, fpDenialAttention, fpDenialPillText, fpDenialCategoryLabel, fpDenialRowVisible, fpDenialSeenFor, fpParseActivity } = ctx.api;
 
 // Ergebnisse stammen aus einem vm-Kontext (andere Prototypen): vor dem Vergleich über JSON in diese Welt holen.
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -74,5 +74,12 @@ assert.strictEqual(fpDenialRowVisible(entry({ protected: true, count: 2 }), 0), 
 assert.strictEqual(fpDenialRowVisible(entry({ protected: true, count: 2 }), 2), false);
 assert.strictEqual(fpDenialRowVisible(entry({ protected: true, count: 3 }), 2), true);
 assert.strictEqual(fpDenialRowVisible(entry(), 0), false, "ohne Aufmerksamkeit nie eine Zeile");
+
+// Gekürzte, gelöschte oder verkleinerte Protokolldatei: der Merker über der gemeldeten Zahl wird 0, die Zeile erscheint wieder
+assert.strictEqual(fpDenialSeenFor(entry({ count: 3 }), 5), 0);
+assert.strictEqual(fpDenialSeenFor(entry({ count: 5 }), 5), 5, "gleiche Zahl bleibt bestätigt");
+assert.strictEqual(fpDenialSeenFor(entry({ count: 6 }), 5), 5);
+assert.strictEqual(fpDenialSeenFor(entry({ count: 2 }), "abc"), 0);
+assert.strictEqual(fpDenialRowVisible(entry({ protected: true, count: 2 }), fpDenialSeenFor(entry({ protected: true, count: 2 }), 7)), true);
 
 console.log("denials_logic_test: ok");

@@ -629,6 +629,12 @@ function fpDenialCategoryLabel(category, labels) {
 function fpDenialRowVisible(entry, seen) {
   return fpDenialAttention(entry) && entry.count > (Number(seen) || 0);
 }
+
+// Sinkt die gemeldete Zahl unter die gemerkte (Protokoll gekürzt, gelöscht oder verändert), gilt der Merker nicht mehr: 0.
+function fpDenialSeenFor(entry, seen) {
+  var value = Number(seen) || 0;
+  return entry && entry.count < value ? 0 : value;
+}
 // FP-DENIALS-END
 
 var fpDenialStore = {};
@@ -1248,8 +1254,12 @@ function fpInbox(main) {
   // Rückfrage) nur bei Schutzziel oder ab drei Ablehnungen in einem Thread. Die Zeile nennt die Kategorie, nie den Befehl.
   // „Gesehen“ merkt sich die Zahl im Browser (localStorage); neue Sperren holen die Zeile zurück.
   function seenKey(ticket) { return "fp-denial-seen:" + ticket; }
-  function readSeen(ticket) {
-    try { return Number(window.localStorage.getItem(seenKey(ticket))) || 0; } catch (error) { return 0; }
+  function readSeen(ticket, entry) {
+    var stored = 0;
+    try { stored = Number(window.localStorage.getItem(seenKey(ticket))) || 0; } catch (error) { stored = 0; }
+    var value = fpDenialSeenFor(entry, stored);
+    if (value !== stored) writeSeen(ticket, value);
+    return value;
   }
   function writeSeen(ticket, count) {
     try { window.localStorage.setItem(seenKey(ticket), String(count)); } catch (error) { /* ohne Speicher bleibt die Zeile bis zum Neuladen weg */ }
@@ -1310,12 +1320,12 @@ function fpInbox(main) {
     rows().forEach(function (row) {
       if (!row.hasAttribute("data-fp-inbox-denied")) return;
       var entry = denials[Number(row.dataset.id)];
-      if (!entry || !fpDenialRowVisible(entry, readSeen(row.dataset.id))) row.remove();
+      if (!entry || !fpDenialRowVisible(entry, readSeen(row.dataset.id, entry))) row.remove();
     });
     Object.keys(denials).forEach(function (key) {
       var id = Number(key);
       var entry = denials[key];
-      if (!fpDenialRowVisible(entry, readSeen(id))) return;
+      if (!fpDenialRowVisible(entry, readSeen(id, entry))) return;
       var existing = rows().filter(function (row) { return row.hasAttribute("data-fp-inbox-denied") && Number(row.dataset.id) === id; })[0];
       if (existing) {
         var pill = existing.querySelector("[data-fp-denial-pill]");
