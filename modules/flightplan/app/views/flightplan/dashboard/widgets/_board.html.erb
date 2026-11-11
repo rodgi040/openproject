@@ -91,6 +91,11 @@
                   <span class="fp-badge fp-badge--warn" data-fp-badge="no-path" title="<%= t("flightplan.board.no_path_hint") %>"><%= t("flightplan.dashboard.reasons.no_path") %></span>
                 <% end %>
                 <span class="fp-card-project"><%= card.project_name %></span>
+                <% if User.current.admin? && !closed %>
+                  <%# OP#1840: Hintergrundstart, nur mit T3-Rahmen (Admins); JS blendet den Knopf bei laufendem Agenten aus. %>
+                  <button type="button" class="fp-start" data-fp-start title="<%= t("flightplan.start.title") %>"><%= t("flightplan.start.button") %></button>
+                  <span class="fp-start-note" data-fp-start-note role="status" hidden></span>
+                <% end %>
               </div>
               <h3 class="fp-card-title"><%= link_to card.subject, flightplan_workplace_path(card.id), data: { turbo: false } %></h3>
               <% chips = card.chip_labels %>

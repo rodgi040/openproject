@@ -21,6 +21,7 @@ en:
       answered: Answered.
       answered_summary: "Answered: %{answer} – #%{id}, status now %{status}"
       answer_by: Answer by %{user}
+      answer_saved: "Answer saved. The agent keeps going while this dashboard is open."
       widget:
         title: Questions
         hint: "Open questions from the agents, oldest first. An option sends the answer at once, together with the free text."
@@ -31,6 +32,43 @@ en:
         answered: Answered.
         sending: Sending …
         failed: Answer failed.
+    acceptance:
+      more: "+%{count} more cards (list limit)"
+      origin: "by %{by}, %{at}"
+      result_by: "Closing statement by %{by}, %{at}"
+      assumption: "Assumption"
+      confirm: "confirm"
+      reject: "reject"
+      note_label: "Note on the assumption"
+      note_placeholder: "Note (required when rejecting)"
+      note_required: "Please enter a note to reject."
+      failed: "Decision failed."
+      no_pr: "No PR linked"
+      no_result: "No closing statement from the agent."
+      sections:
+        changed: "Changed"
+        checked: "Checked"
+        open: "Open"
+      decided:
+        confirmed: "Assumption confirmed – #%{id}"
+        rejected: "Assumption rejected – #%{id}"
+      decided_short:
+        confirmed: "Assumption confirmed."
+        rejected: "Assumption rejected."
+    forward:
+      pending: "The agent has not received the answer yet"
+      no_thread: "No chat for this ticket"
+    start:
+      button: "Start in background"
+      title: "Start the agent in the background (s)"
+      sending: "Sending start …"
+      accepted: "started"
+      running: "already running"
+      slots_full: "4 of 4 slots in use"
+      error: "Start not possible"
+      no_context: "Ticket not available"
+      slots: "%{count} of 4 slots in use"
+      slots_hint: "Ticket threads with a running agent (at most 4 at once)"
     board:
       title: Flightplan
       projects: Projects
@@ -174,7 +212,24 @@ en:
         other: "%{count} open"
       path_missing: "Path missing"
       no_hits: "No hits for this search."
-      keys: "j / k row · ↵ into the chat · o open ticket · . next · c new chat · / search · 1–4 tabs"
+      keys: "j / k row · ↵ into the chat · o open ticket · . next · c new chat · / search · 1–4 tabs · i needs you · 1–9 pick answer · s start in background"
+      inbox:
+        title: "Needs you"
+        hint: "approval, question, acceptance, failure, input"
+        empty: "Nothing is waiting for you."
+        count: "Needs you (%{count})"
+        count_hint: "Go to the „Needs you“ list"
+        kinds:
+          approval: "Command approval"
+          question: "Question"
+          result: "Result for acceptance"
+          error: "Run failed"
+          input: "Input needed"
+        states:
+          working: "Agent working"
+          approval: "Approval needed"
+          input: "Input needed"
+          error: "Run failed"
       hints:
         question: "waits for your answer"
         for_you: "planned, start needs your GO"

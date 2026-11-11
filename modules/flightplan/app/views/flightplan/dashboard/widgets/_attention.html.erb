@@ -73,7 +73,7 @@
               <% if row[:reasons].map(&:to_s).include?("question") %>
                 <% questions_by_wp[row[:id]]&.each do |question| %>
                   <%= tag.div(id: "q-#{question[:id]}", class: "fp-q fp-q--inline",
-                              data: { fp_question: question[:id], fp_answered_text: t("flightplan.questions.widget.answered"),
+                              data: { fp_question: question[:id], fp_answered_text: t("flightplan.questions.widget.answered"), fp_saved_hint: t("flightplan.questions.answer_saved"),
                                       fp_sending_text: t("flightplan.questions.widget.sending"),
                                       fp_failed_text: t("flightplan.questions.widget.failed") }) do %>
                     <%= render "flightplan/dashboard/question_body", row: question, return_to: "home", selected_scope: nil, compact: true %>

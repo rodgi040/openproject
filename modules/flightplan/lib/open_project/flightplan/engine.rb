@@ -15,14 +15,17 @@ module OpenProject::Flightplan
 
     add_api_endpoint "API::V3::Root" do
       mount ::API::V3::Flightplan::QuestionsAPI
+      mount ::API::V3::Flightplan::AssumptionsAPI
       mount ::API::V3::Flightplan::WikiAPI
     end
 
     add_api_endpoint "API::V3::WorkPackages::WorkPackagesAPI", :id do
       mount ::API::V3::Flightplan::WorkPackageQuestionsAPI
+      mount ::API::V3::Flightplan::WorkPackageAssumptionsAPI
     end
 
-    replace_principal_references "Flightplan::Question" => %i[author_id answered_by_id]
+    replace_principal_references "Flightplan::Question" => %i[author_id answered_by_id],
+                                  "Flightplan::Assumption" => %i[author_id decided_by_id]
 
     config.to_prepare do
       OpenProject::Flightplan::Hooks

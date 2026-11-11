@@ -1,6 +1,6 @@
 <%# OP#1708: Frage mit Optionen, Freitext und Antwortformular. Gemeinsam für das Widget „Rückfragen“ (Leser-Ansicht) und die
     Zeile in „Aufmerksamkeit“ (Admin). Locals: row (Flightplan::QuestionsWidget-Zeile), return_to, selected_scope, optional
-    compact: Kontext, Beschreibung und Kommentare stehen dann eingeklappt in <details>. Antwortweg: POST
+    id_prefix (Textfeld-Id, wenn dieselbe Frage mehrfach auf der Seite steht), compact: Kontext, Beschreibung und Kommentare stehen dann eingeklappt in <details>. Antwortweg: POST
     /flightplan/questions/:id/answer mit Rails-CSRF-Token (form_with). %>
 <% context = row[:context] %>
 <% compact = local_assigns[:compact] %>
@@ -34,7 +34,7 @@
   <% if selected_scope %>
     <%= hidden_field_tag scope_param, selected_scope, id: nil %>
   <% end %>
-  <textarea name="text" class="fp-q-input" rows="2" id="fp-q-text-<%= row[:id] %>"
+  <textarea name="text" class="fp-q-input" rows="2" id="<%= local_assigns[:id_prefix] || "fp-q-text" %>-<%= row[:id] %>"
             aria-label="<%= t("flightplan.questions.widget.free_text_for", question: row[:text].truncate(80)) %>"
             placeholder="<%= row[:options].any? ? t("flightplan.questions.widget.free_text_optional") : t("flightplan.questions.free_text") %>"></textarea>
   <div class="fp-q-actions">

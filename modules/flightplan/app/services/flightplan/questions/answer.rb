@@ -11,6 +11,18 @@ module Flightplan
         new(user:, question:, option:, text:).call
       end
 
+      # Admin oder Rolle „Mensch“ im Projekt des Pakets. Auch OP#1839 (Annahmen entscheiden) nutzt diese Prüfung.
+      def self.human?(user, work_package)
+        return true if user.admin?
+
+        role = Role.find_by(name: "Mensch")
+        return false unless role
+
+        Member.where(project_id: work_package.project_id, user_id: user.id, entity_type: nil)
+          .joins(:member_roles)
+          .exists?(member_roles: { role_id: role.id })
+      end
+
       def initialize(user:, question:, option:, text:)
         @user = user
         @question = question
@@ -45,14 +57,7 @@ module Flightplan
       private
 
       def allowed?
-        return true if @user.admin?
-
-        role = Role.find_by(name: "Mensch")
-        return false unless role
-
-        Member.where(project_id: @question.work_package.project_id, user_id: @user.id, entity_type: nil)
-          .joins(:member_roles)
-          .exists?(member_roles: { role_id: role.id })
+        self.class.human?(@user, @question.work_package)
       end
 
       def comment!

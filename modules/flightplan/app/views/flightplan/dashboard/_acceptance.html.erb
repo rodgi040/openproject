@@ -1,0 +1,59 @@
+<%# OP#1839: Karte „Ergebnis zur Abnahme“ (Rang 3 in „Braucht dich“). Local: row (Flightplan::Acceptance::Row). Titel, PR-Link,
+    Abschlussaussage und Annahmen sind untrusted: nur escaped, nie als HTML. Merge-Guard und Diff-Größe kennt das Modul
+    nicht und stehen deshalb nicht da. Entscheiden: POST /flightplan/assumptions/:id/decide (Session, Rails-CSRF-Token). %>
+<% row = local_assigns.fetch(:row) %>
+<% pr = row.pull_request %>
+<%= tag.li class: "fp-wl-row fp-inbox-row", tabindex: -1, data: {
+      fp_inbox_row: "", kind: "result", rank: Flightplan::Worklist::INBOX_KINDS.index("result"),
+      since: row.since.to_i, id: row.id, subject: row.subject, project: row.work_package.project.identifier,
+      status: row.status, labels: "[]", url: work_package_path(row.id), fp_result: row.id,
+      group: (row.assumptions.any? ? 0 : 1), fp_review: (row.review ? "1" : "0"), fp_decided_confirmed: t("flightplan.acceptance.decided_short.confirmed"),
+      fp_decided_rejected: t("flightplan.acceptance.decided_short.rejected"),
+      fp_sending_text: t("flightplan.questions.widget.sending"), fp_failed_text: t("flightplan.acceptance.failed"),
+      fp_note_required: t("flightplan.acceptance.note_required")
+    } do %>
+  <div class="fp-wl-line">
+    <span class="fp-run-pill fp-run-pill--result"><%= t("flightplan.worklist.inbox.kinds.result") %></span>
+    <%= link_to "##{row.id}", flightplan_workplace_path(row.id), class: "fp-wl-id", data: { turbo: false }, title: t("flightplan.worklist.open_ticket") %>
+    <span class="fp-wl-title"><%= row.subject %></span>
+    <time class="fp-wl-age" datetime="<%= row.since.iso8601 %>" title="<%= l(row.since, format: :short) %>"><%= Flightplan::Dashboard.age_label([(Time.current - row.since).to_i, 0].max) %></time>
+  </div>
+  <div class="fp-wl-meta">
+    <span><%= row.project %></span>
+    <span><%= row.status %></span>
+    <% if pr %>
+      <span><%= t("flightplan.questions.pull_request") %>: <%= link_to pr, pr, target: "_blank", rel: "noopener noreferrer", class: "fp-result-pr" %>
+        <span class="fp-result-origin" data-fp-pr-origin>(<%= t("flightplan.acceptance.origin", by: row.pull_request_by.presence || "–", at: l(row.pull_request_at, format: :short)) %>)</span></span>
+    <% else %>
+      <span class="fp-result-nopr"><%= t("flightplan.acceptance.no_pr") %></span>
+    <% end %>
+  </div>
+  <% if row.result %>
+    <div class="fp-result" data-fp-result-text>
+      <p class="fp-result-origin" data-fp-result-origin><%= t("flightplan.acceptance.result_by", by: row.result.by.presence || "–", at: l(row.result.at, format: :short)) %></p>
+      <% { changed: "changed", checked: "checked", open_points: "open" }.each do |key, label| %>
+        <% value = row.result.public_send(key) %>
+        <p class="fp-result-title"><%= t("flightplan.acceptance.sections.#{label}") %></p>
+        <p class="fp-result-body"><%= value.presence || "–" %></p>
+      <% end %>
+    </div>
+  <% else %>
+    <p class="fp-result-missing" data-fp-result-missing><%= t("flightplan.acceptance.no_result") %></p>
+  <% end %>
+  <% row.assumptions.each do |assumption| %>
+    <div class="fp-assumption" data-fp-assumption="<%= assumption.id %>">
+      <p class="fp-assumption-text"><strong><%= t("flightplan.acceptance.assumption") %>:</strong> <%= assumption.text %></p>
+      <%= form_with url: flightplan_assumption_decide_path(assumption.id), method: :post, local: true, class: "fp-q-form",
+                    data: { fp_assumption_form: assumption.id, ticket: row.id, text: assumption.text, turbo: false } do %>
+        <textarea name="note" class="fp-q-input" rows="2" id="fp-assumption-note-<%= assumption.id %>"
+                  aria-label="<%= t("flightplan.acceptance.note_label") %>"
+                  placeholder="<%= t("flightplan.acceptance.note_placeholder") %>"></textarea>
+        <div class="fp-q-actions">
+          <button type="submit" name="decision" value="confirmed" class="fp-assumption-btn"><%= t("flightplan.acceptance.confirm") %></button>
+          <button type="submit" name="decision" value="rejected" class="fp-assumption-btn fp-assumption-reject"><%= t("flightplan.acceptance.reject") %></button>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+  <p class="fp-q-note" data-fp-assumption-note role="status" hidden></p>
+<% end %>
