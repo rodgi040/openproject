@@ -7,10 +7,11 @@ module Flightplan
     PAGE = 200
     DONE_WINDOW = 14
     HUMAN_LABEL = "ready-for-human"
-    # "human" (OP#1670 D2): Neu mit ready-for-human. Kein Ablageziel, die Spalte folgt dem Label, nicht dem Status.
+    # "human" (OP#1670 D2, OP#1818): Status "Für Mensch", Board-Spalte "Du setzt um". Übergang: Pakete im Status Neu, die noch
+    # ready-for-human tragen und noch nicht umgestellt sind, stehen weiter hier (human_ids), bis der Sync sie umgestellt hat.
     COLUMNS = [
       { key: "triage", status: "Neu" },
-      { key: "human", status: "Neu", drop: false },
+      { key: "human", status: "Für Mensch" },
       { key: "question", status: "Wartet auf Mensch" },
       { key: "for_you", status: "Geplant" },
       { key: "agent_ready", status: "Startfreigabe" },
@@ -338,6 +339,7 @@ module Flightplan
     def column_key(status_name, assignee_id, human: false)
       case status_name
       when "Neu" then human ? "human" : "triage"
+      when "Für Mensch" then "human"
       when "Wartet auf Mensch" then "question"
       when "Startfreigabe" then "agent_ready"
       when "In Arbeit" then "in_progress"

@@ -52,7 +52,7 @@
        data-fp-drop-off-text="<%= t("flightplan.board.drop_off") %>">
     <% board.columns.each do |column| %>
       <% closed = Flightplan::Board::CLOSED_COLUMNS.include?(column.key) %>
-      <%= tag.section class: "fp-column", data: { column: column.key, count: column.count, status: column.status, drop: ("off" if column.key == "human"), fp_group: "" } do %>
+      <%= tag.section class: "fp-column", data: { column: column.key, count: column.count, status: column.status, fp_group: "" } do %>
         <header class="fp-column-head">
           <strong><%= t("flightplan.board.columns.#{column.key}") %></strong>
           <span class="fp-count" data-fp-group-count data-fp-total="<%= column.count %>"><%= column.count %></span>
