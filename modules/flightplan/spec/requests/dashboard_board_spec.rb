@@ -57,6 +57,7 @@ RSpec.describe "Flightplan board widget", :skip_csrf, type: :rails_request do
   let!(:geplant) { ensure_status("Geplant") }
   let!(:startfreigabe) { ensure_status("Startfreigabe") }
   let!(:in_arbeit) { ensure_status("In Arbeit") }
+  let!(:fuer_mensch) { ensure_status("Für Mensch") } # OP#1818
   let!(:waiting) { ensure_status("Wartet auf Mensch") }
   let!(:review) { ensure_status("Review") }
   let!(:fertig) { ensure_status("Fertig", closed: true) }
@@ -88,6 +89,7 @@ RSpec.describe "Flightplan board widget", :skip_csrf, type: :rails_request do
   let!(:wave_wp) { wp("Fabrik Welle", project: factory, status: neu, type: wave_type, labels: %w[fp:wave]) }
   let!(:human_wp) { wp("Fabrik Mensch", project: factory, status: neu, labels: %w[ready-for-human documentation]) }
   let!(:studio_human_wp) { wp("Studio Mensch", project: studio, status: neu, labels: %w[ready-for-human]) }
+  let!(:status_human_wp) { wp("Fabrik Für Mensch", project: factory, status: fuer_mensch, labels: %w[documentation]) }
   let!(:plan_wp) { wp("Fabrik Geplant", project: factory, status: geplant, labels: %w[geplant claude]) }
   let!(:start_nopath_wp) { wp("Fabrik Start ohne Weg", project: factory, status: startfreigabe, labels: %w[wayfinder:task]) }
   let!(:start_label_wp) do
@@ -178,7 +180,8 @@ RSpec.describe "Flightplan board widget", :skip_csrf, type: :rails_request do
         expect(keys).to eq(%w[triage human question for_you agent_ready in_progress review done])
         expect(column("human").at_css(".fp-column-head strong").text).to eq("Du setzt um")
         expect(column("for_you").at_css(".fp-column-head strong").text).to eq("Freigabe entscheiden")
-        expect(column("human")["data-drop"]).to eq("off")
+        expect(column("human")["data-status"]).to eq("Für Mensch")
+        expect(column("human")["data-drop"]).to be_nil # OP#1818: Spalte ist ein Ablageziel
         expect(board_node.css("section.fp-column[data-fp-group]").size).to eq(8)
 
         tools = widget.at_css("[data-fp-widget-tools]")
@@ -230,10 +233,12 @@ RSpec.describe "Flightplan board widget", :skip_csrf, type: :rails_request do
       expect(payload).to include("ok" => true, "column" => "for_you", "lock_version" => bug_wp.reload.lock_version)
       expect(bug_wp.status).to eq(geplant)
 
+      # OP#1818: "Du setzt um" ist ein Ablageziel und setzt den Status "Für Mensch".
+      create(:workflow, type: plan_wp.type, role:, old_status: geplant, new_status: fuer_mensch)
       post "/flightplan/board/move", params: { id: plan_wp.id, column: "human", lock_version: plan_wp.lock_version }
-      expect(response).to have_http_status(:unprocessable_entity)
-      expect(JSON.parse(response.body)["error"]).to include("ready-for-human")
-      expect(plan_wp.reload.status).to eq(geplant)
+      expect(response).to have_http_status(:ok), response.body
+      expect(JSON.parse(response.body)).to include("ok" => true, "column" => "human")
+      expect(plan_wp.reload.status).to eq(fuer_mensch)
     end
 
     it "shows no wiki chip without a project and a labelled wiki link for exactly one project with wiki (B1)" do
@@ -341,14 +346,14 @@ RSpec.describe "Flightplan board widget", :skip_csrf, type: :rails_request do
       expect(card(bug_wp).at_css("[data-fp-label-pick]").name).to eq("button")
     end
 
-    it "puts Neu with ready-for-human into its own column and keeps the total (B6)" do
+    it "puts Für Mensch and (transition) Neu with ready-for-human into the human column and keeps the total (B6, OP#1818)" do
       get "/"
-      expect(subjects("human")).to contain_exactly("Fabrik Mensch", "Studio Mensch")
-      expect(subjects("triage")).not_to include("Fabrik Mensch", "Studio Mensch")
+      expect(subjects("human")).to contain_exactly("Fabrik Mensch", "Studio Mensch", "Fabrik Für Mensch")
+      expect(subjects("triage")).not_to include("Fabrik Mensch", "Studio Mensch", "Fabrik Für Mensch")
       counts = widget.css("#fp-board section.fp-column").to_h { |node| [node["data-column"], node["data-count"].to_i] }
       neu_total = WorkPackage.where(status: neu).count
       expect(counts["triage"]).to eq(neu_total - 2)
-      expect(counts["human"]).to eq(2)
+      expect(counts["human"]).to eq(3)
       expect(counts["for_you"]).to eq(1)
       shown = WorkPackage.where.not(status: abgelehnt).count
       expect(counts.values.sum).to eq(shown)
