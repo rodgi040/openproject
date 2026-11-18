@@ -60,7 +60,8 @@ module Flightplan
     end
 
     def self.project_choices(user)
-      counts = WorkPackage.visible(user).joins(:status).where(statuses: { is_closed: false }).group(:project_id).count
+      counts = Research.excluding(WorkPackage.visible(user).joins(:status).where(statuses: { is_closed: false }))
+        .group(:project_id).count
       Project.visible(user).order(:name).map do |project|
         { identifier: project.identifier, name: project.name, open_count: counts[project.id].to_i }
       end
@@ -292,7 +293,7 @@ module Flightplan
     end
 
     def open_label_names
-      scope = WorkPackage.visible(@user).joins(:status).where(statuses: { is_closed: false })
+      scope = Research.excluding(WorkPackage.visible(@user).joins(:status).where(statuses: { is_closed: false }))
       scope = apply_agents(apply_search(apply_projects(scope)))
       options = labels_field.custom_options.pluck(:id, :value).to_h { |id, value| [id.to_s, value] }
       CustomValue.where(custom_field_id: labels_field.id, customized_type: "WorkPackage", customized_id: scope.select(:id))
@@ -349,7 +350,7 @@ module Flightplan
     end
 
     def filtered
-      scope = WorkPackage.visible(@user).joins(:status)
+      scope = Research.excluding(WorkPackage.visible(@user).joins(:status))
       scope = apply_projects(scope)
       scope = apply_search(scope)
       scope = apply_labels(scope)
