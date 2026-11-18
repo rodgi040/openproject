@@ -8,7 +8,7 @@ module Flightplan
 
     def show
       type_id = Research.type_id
-      if type_id.nil? || !@project.types.exists?(id: type_id)
+      if type_id.nil? || !@project.enabled_types.exists?(id: type_id)
         flash[:notice] = t("flightplan.research.missing_type")
         return redirect_to project_work_packages_path(@project)
       end

@@ -16,7 +16,7 @@ module Flightplan
 
     def visible_in?(project)
       project.present? && project.module_enabled?("work_package_tracking") &&
-        project.types.exists?(name: TYPE_NAME)
+        project.enabled_types.exists?(name: TYPE_NAME)
     end
 
     # Ohne Typ Recherche bleibt der Scope unverändert.

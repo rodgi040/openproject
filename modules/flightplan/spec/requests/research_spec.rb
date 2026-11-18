@@ -4,7 +4,7 @@ require "#{File.dirname(__FILE__)}/../spec_helper"
 
 # OP#2841: Menüpunkt „Research“, Weiterleitung auf die gefilterte Arbeitspaketliste, Recherche nicht in Board und Dashboard.
 RSpec.describe "Flightplan research", :skip_csrf, type: :rails_request do
-  let(:role) { create(:project_role, permissions: %i[view_work_packages]) }
+  let(:role) { create(:project_role, permissions: %i[view_work_packages view_members]) }
   let(:recherche) { create(:type, name: "Recherche") }
   let(:aufgabe) { create(:type, name: "Aufgabe Research") }
   let(:project) { create(:project, name: "Research Fabrik", identifier: "research-fabrik", public: false, types: [recherche, aufgabe]) }
@@ -64,7 +64,7 @@ RSpec.describe "Flightplan research", :skip_csrf, type: :rails_request do
     end
 
     it "redirects to the plain list with a notice when the type is not active in the project" do
-      project.types = [aufgabe]
+      ProjectType.where(project_id: project.id, type_id: recherche.id).delete_all
       get "/projects/#{project.identifier}/research"
       expect(response).to redirect_to("/projects/research-fabrik/work_packages")
       expect(flash[:notice]).to eq(I18n.t("flightplan.research.missing_type"))

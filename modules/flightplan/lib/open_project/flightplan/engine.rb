@@ -19,6 +19,14 @@ module OpenProject::Flightplan
            before: :members,
            icon: "search",
            if: ->(project) { ::Flightplan::Research.visible_in?(project) }
+
+      # Das Menü zeigt einen Eintrag nur, wenn seine Action an eine Berechtigung gebunden ist (Muster wie modules/gantt).
+      Rails.application.reloader.to_prepare do
+        OpenProject::AccessControl.permission(:view_work_packages).tap do |permission|
+          action = "flightplan/research/show"
+          permission.controller_actions << action unless permission.controller_actions.include?(action)
+        end
+      end
     end
 
     add_api_endpoint "API::V3::Root" do
