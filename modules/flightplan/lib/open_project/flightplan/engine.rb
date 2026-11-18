@@ -11,6 +11,14 @@ module OpenProject::Flightplan
              bundled: true do
       # OP#1674: kein Eintrag „Flightplan“ mehr; das Board ist ein Widget der Startseite.
       # OP#1721: auch kein Eintrag „ADA Dashboard“ mehr; die Hauptseite (/) ist die eine Seite.
+      # OP#2841: Menüpunkt „Research“ in Projekten, die den Typ Recherche aktiv haben; er leitet auf die gefilterte Liste um.
+      menu :project_menu,
+           :flightplan_research,
+           { controller: "/flightplan/research", action: :show },
+           caption: ->(*) { I18n.t("flightplan.research.menu") },
+           before: :members,
+           icon: "search",
+           if: ->(project) { ::Flightplan::Research.visible_in?(project) }
     end
 
     add_api_endpoint "API::V3::Root" do

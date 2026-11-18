@@ -2,6 +2,9 @@ en:
   flightplan:
     label: Flightplan
     intro: Flightplan
+    research:
+      menu: Research
+      missing_type: The type Recherche is not active in this project.
     questions:
       menu: Questions
       all_projects: All projects

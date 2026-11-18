@@ -131,7 +131,7 @@ module Flightplan
     # Für dashboard-check.sh (H2): offene Arbeitspakete je Status und die Kachelzahlen derselben Seite.
     def self.check_report(user:, now: Time.current)
       dashboard = load(user:, params: {}, now:)
-      statuses = WorkPackage.visible(user).joins(:status).where(statuses: { is_closed: false })
+      statuses = Research.excluding(WorkPackage.visible(user).joins(:status).where(statuses: { is_closed: false }))
         .group("statuses.name").count
       {
         statuses:,
@@ -216,7 +216,7 @@ module Flightplan
       oldest_questions = Flightplan::Question.open.group(:work_package_id).minimum(:created_at)
       cut = @now - STALE_DAYS.days
       ids = self.class.status_ids
-      found = WorkPackage.visible(@user).joins(:status)
+      found = Research.excluding(WorkPackage.visible(@user).joins(:status))
         .where(statuses: { is_closed: false })
         .where(
           "work_packages.status_id IN (:names) OR (work_packages.status_id = :progress AND work_packages.updated_at < :cut) " \
@@ -424,7 +424,7 @@ module Flightplan
     end
 
     def build_tiles(bereiche, running)
-      scope = WorkPackage.visible(@user).joins(:status).where(statuses: { is_closed: false })
+      scope = Research.excluding(WorkPackage.visible(@user).joins(:status).where(statuses: { is_closed: false }))
       ids = self.class.status_ids
       open = scope.group(:project_id).count
       blocked = scope.where(work_packages: { status_id: ids[STATUS_WAITING] }).group(:project_id).count
