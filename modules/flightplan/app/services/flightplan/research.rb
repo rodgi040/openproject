@@ -11,7 +11,8 @@ module Flightplan
     module_function
 
     def type_id
-      ::Type.where(name: TYPE_NAME).pick(:id)
+      # Je Request einmal (cv-1-4): Board und Dashboard rufen excluding mehrfach.
+      RequestStore.fetch(:flightplan_research_type_id) { ::Type.where(name: TYPE_NAME).pick(:id) }
     end
 
     def visible_in?(project)
